@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 from re import Pattern
-from typing import ClassVar
 
-from enum import Enum, auto, unique
+from enum import Enum, unique
 
 # import datetime
 # _DATE_PATTERN = re.compile(
@@ -45,7 +43,7 @@ _EARLY_ROMAN_NUMERALS.extend([f"X{value}" for value in _EARLY_ROMAN_NUMERALS])
 
 
 _DISC_PATTERN = re.compile(
-    rf"Dis[ck] (?P<disc>\d+|[A-Z]|{'|'.join(_EARLY_ROMAN_NUMERALS)})"
+    rf"[Dd]is[ck] (?P<disc>\d+|[A-Z]|{'|'.join(_EARLY_ROMAN_NUMERALS)})"
 )
 
 
@@ -107,7 +105,7 @@ class Region(Enum):
     FINLAND = "Finland"
 
 
-class RomMetadata:
+class Metadata:
     _OPEN_TO_CLOSE: dict[str, str] = {
         "[": "]",
         "(": ")",
@@ -126,7 +124,8 @@ class RomMetadata:
         member.value: member for member in Region
     }
 
-    def __init__(self,
+    def __init__(
+        self,
         stem: str,
         *,
         category: str = "",
@@ -143,7 +142,7 @@ class RomMetadata:
         regions: set[Region] = set()
         disc: int | None = None
 
-        for match in chain(RomMetadata._TOKEN_RE.finditer(stem), [None]):
+        for match in chain(Metadata._TOKEN_RE.finditer(stem), [None]):
             start = match.start() if match else len(stem)
             if start != last_end:
                 segment = stem[last_end:start]
@@ -157,7 +156,7 @@ class RomMetadata:
                 elif symbol := match.group("close"):
                     if not in_open_tag:
                         raise ValueError(f"group closed but none open: {stem}")
-                    if symbol != RomMetadata._OPEN_TO_CLOSE[in_open_tag]:
+                    if symbol != Metadata._OPEN_TO_CLOSE[in_open_tag]:
                         raise ValueError(f"mismatched close tag: {stem}")
                     in_open_tag = None
                     if tag_parts:
@@ -181,17 +180,17 @@ class RomMetadata:
                         else:
                             language_results: list[Language] | None = []
                             region_results: list[Region] | None = []
-                            tag_tokens = RomMetadata._TAG_COMMA_RE.split(tag)
+                            tag_tokens = Metadata._TAG_COMMA_RE.split(tag)
                             for token in tag_tokens:
                                 if language_results is not None:
-                                    if language := RomMetadata._LANGUAGE_LOOKUP.get(
+                                    if language := Metadata._LANGUAGE_LOOKUP.get(
                                         token, None
                                     ):
                                         language_results.append(language)
                                     else:
                                         language_results = None
                                 if region_results is not None:
-                                    if region := RomMetadata._REGION_LOOKUP.get(
+                                    if region := Metadata._REGION_LOOKUP.get(
                                         token, None
                                     ):
                                         region_results.append(region)
@@ -215,15 +214,15 @@ class RomMetadata:
             elif in_open_tag:
                 raise ValueError(f"unterminated group: {stem}")
         self.stem = stem
-        self.title=" ".join(title_parts)
-        self.tags=tags
-        self.languages=languages
-        self.regions=regions
-        self.disc=disc
+        self.title = " ".join(title_parts)
+        self.tags = tags
+        self.languages = languages
+        self.regions = regions
+        self.disc = disc
         # not detected, just set
-        self.category=category
-        self.id=id
-        self.cloneofid=cloneofid
+        self.category = category
+        self.id = id
+        self.cloneofid = cloneofid
 
     def __str__(self) -> str:
         return f"{repr(self.title)}, {repr(self.tags)}"
@@ -243,7 +242,7 @@ def run_tests() -> None:
     ]
 
     for value in test_values:
-        print(RomMetadata(value))
+        print(Metadata(value))
 
 
 def main_gen(rom_root: Path) -> None:
@@ -254,12 +253,8 @@ def main_gen(rom_root: Path) -> None:
             if path.is_dir():
                 continue
             try:
-                metadata = RomMetadata(path.stem)
+                metadata = Metadata(path.stem)
                 all_tags.update(metadata.tags)
-                if metadata.title == "Sony":
-                    import pdb
-
-                    pdb.set_trace()
                 metadata_file.write(str(metadata) + "\n")
             except ValueError as e:
                 print(f"Error with file: {path})")
