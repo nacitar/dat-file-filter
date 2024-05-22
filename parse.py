@@ -25,15 +25,17 @@ def get_int_attribute(element: ET.Element, name: str) -> int | None:
 # TODO: add methods to determine english version, or whatever else is relevant
 @dataclass
 class Game:
-    stem_to_metadata: dict[str, Metadata] = field(default_factory=dict)
+    versions: list[Metadata]
+
+    # def english_version(self):
 
 
 class DatFile:
     def __init__(self, path: Path | str):
         self.name = ""
         self.stem_to_metadata: dict[str, Metadata] = {}
-        id_to_metadata: dict[int, Metadata] = {}
-        original_to_clones: dict[int, set[int]] = {}
+        id_to_metadata: dict[str, Metadata] = {}
+        original_id_to_clones: dict[str, set[str]] = {}
 
         tree = ET.parse(path)
         root = tree.getroot()
@@ -51,44 +53,61 @@ class DatFile:
                 category = get_child_text(child, "category")
                 if stem in self.stem_to_metadata:
                     raise ValueError(f"Duplicate stem: {stem}")
-                id = get_int_attribute(child, "id")
-                cloneofid = get_int_attribute(child, "cloneofid")
+                id = child.attrib.get("id", "")
+                cloneofid = child.attrib.get("cloneofid", "")
                 metadata = Metadata(
                     stem,
                     category=category,
-                    id=id,
-                    cloneofid=cloneofid,
                 )
                 self.stem_to_metadata[stem] = metadata
 
-                if id is not None:
+                if id:
                     if id in id_to_metadata:
                         raise ValueError(f"Duplicate id: {id}")
                     id_to_metadata[id] = metadata
-                    if cloneofid is not None:
-                        original_to_clones.setdefault(cloneofid, set()).add(id)
-                elif cloneofid is not None:
+                    if cloneofid:
+                        original_id_to_clones.setdefault(cloneofid, set()).add(
+                            id
+                        )
+                elif cloneofid:
                     raise ValueError(
                         f'"{stem}" has no id, but has cloneofid {cloneofid}'
                     )
+        # NOTE: same game might have multiple names
         # group game versions
-        self.title_to_game: dict[
-            str, Game
-        ] = {}  # NOTE: same game might have multiple names
-        # groups using the datfile's clone ids
-        for id, clones in original_to_clones.items():
-            game = Game()
+        self.title_to_stems: dict[str, set[str]] = {}
+        # groups using clone ids
+        for id, clones in original_id_to_clones.items():
+            stems: set[str] = set()
             for metadata in chain(
                 [id_to_metadata[id]] if id in id_to_metadata else [],
                 (id_to_metadata[cloneid] for cloneid in clones),
             ):
-                game.stem_to_metadata[metadata.stem] = metadata
-                self.title_to_game[metadata.title] = game
+                stems.add(metadata.stem)
+                self.title_to_stems[metadata.title] = stems
         # groups using the title
         for stem, metadata in self.stem_to_metadata.items():
-            game = self.title_to_game.setdefault(metadata.title, Game())
-            if stem not in game.stem_to_metadata:
-                game.stem_to_metadata[stem] = metadata
+            stems = self.title_to_stems.setdefault(metadata.title, set())
+            if stem not in stems:
+                stems.add(stem)
+
+        self.title_to_games: dict[str, Game] = {}
+
+        for title, stems in self.title_to_stems.items():
+            versions: list[Metadata] = []
+            for stem in stems:
+                metadata = self.stem_to_metadata[stem]
+                if metadata.is_prerelease:
+                    continue  # skip pre-releases
+                versions.append(metadata)
+            # TODO: determine the best version while filtering here
+            # which will involve parsing of version numbers/dates
+            # and sorting based upon them, grabbing the first/last
+            game = Game(
+                versions=[self.stem_to_metadata[stem] for stem in stems]
+            )
+
+        # TODO: loop through title_to_stems, removing dupes
 
 
 def main(argv: Sequence[str] | None = None) -> int:

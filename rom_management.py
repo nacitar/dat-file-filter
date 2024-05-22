@@ -129,8 +129,6 @@ class Metadata:
         stem: str,
         *,
         category: str = "",
-        id: int | None = None,
-        cloneofid: int | None = None,
     ) -> None:
         title_parts: list[str] = []
         tag_parts: list[str] = []
@@ -142,6 +140,7 @@ class Metadata:
         regions: set[Region] = set()
         disc: int | None = None
 
+        is_prerelease = False
         for match in chain(Metadata._TOKEN_RE.finditer(stem), [None]):
             start = match.start() if match else len(stem)
             if start != last_end:
@@ -208,6 +207,8 @@ class Metadata:
                             else:
                                 # normal tag, or part of the title
                                 tags.append(tag)
+                                if tag.lower() in ["beta", "alpha"]:
+                                    is_prerelease = True
                         ###################################################
                         tag_parts = []
                 last_end = match.end()
@@ -219,10 +220,9 @@ class Metadata:
         self.languages = languages
         self.regions = regions
         self.disc = disc
+        self.is_prerelease = is_prerelease
         # not detected, just set
         self.category = category
-        self.id = id
-        self.cloneofid = cloneofid
 
     def __str__(self) -> str:
         return f"{repr(self.title)}, {repr(self.tags)}"
