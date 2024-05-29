@@ -1,15 +1,11 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
-import argparse
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
-from typing import Sequence
-
-from rom_management import Metadata
-from pathlib import Path
+from dataclasses import dataclass
 from itertools import chain
+from pathlib import Path
+
+from .rom_management import Metadata
 
 
 def get_child_text(element: ET.Element, name: str) -> str:
@@ -55,10 +51,7 @@ class DatFile:
                     raise ValueError(f"Duplicate stem: {stem}")
                 id = child.attrib.get("id", "")
                 cloneofid = child.attrib.get("cloneofid", "")
-                metadata = Metadata(
-                    stem,
-                    category=category,
-                )
+                metadata = Metadata.from_stem(stem, category=category)
                 self.stem_to_metadata[stem] = metadata
 
                 if id:
@@ -103,28 +96,8 @@ class DatFile:
             # TODO: determine the best version while filtering here
             # which will involve parsing of version numbers/dates
             # and sorting based upon them, grabbing the first/last
-            game = Game(
-                versions=[self.stem_to_metadata[stem] for stem in stems]
-            )
+            # game = Game(
+            #    versions=[self.stem_to_metadata[stem] for stem in stems]
+            # )
 
         # TODO: loop through title_to_stems, removing dupes
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Process a .dat file.")
-    parser.add_argument(
-        "dat_file_path", type=str, help="The path to the .dat file"
-    )
-    args = parser.parse_args(args=argv)
-
-    # dat_content = parse_dat_file(args.dat_file_path)
-    # print(dat_content)
-    dat_content = DatFile(args.dat_file_path)
-
-    return 0
-
-
-if __name__ == "__main__":
-    import sys
-
-    sys.exit(main())
