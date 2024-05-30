@@ -77,6 +77,9 @@ _PRERELEASE_PATTERN = re.compile(
     ),
     re.IGNORECASE,
 )
+_DEMO_PATTERN = re.compile(
+    (r"(?P<name>demo|sample)" r"( (?P<iteration>\d+))?"), re.IGNORECASE
+)
 
 _EARLY_ROMAN_NUMERALS = [
     "I",
@@ -136,6 +139,8 @@ class Language(Enum):
 @unique
 class Region(Enum):
     USA = "USA"
+    AUSTRIA = "Austria"
+    NORWAY = "Norway"
     EUROPE = "Europe"
     KOREA = "Korea"
     ASIA = "Asia"
@@ -203,7 +208,7 @@ class Metadata:
         for tag in stem_info.tags:
             lower_tag = tag.lower()
             ###################################################
-            if lower_tag in ["demo", "sample"]:
+            if _DEMO_PATTERN.fullmatch(tag):
                 if demo:
                     raise ValueError(f"Parsed multiple demo tags: {stem}")
                 demo = tag
