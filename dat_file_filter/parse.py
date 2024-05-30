@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
 
-from .rom_management import Metadata
+from .metadata import Metadata
 
 
 def get_child_text(element: ET.Element, name: str) -> str:
@@ -13,9 +13,9 @@ def get_child_text(element: ET.Element, name: str) -> str:
     return child.text or "" if child is not None else ""
 
 
-def get_int_attribute(element: ET.Element, name: str) -> int | None:
-    value = element.attrib.get(name)
-    return int(value) if value is not None else None
+# def get_int_attribute(element: ET.Element, name: str) -> int | None:
+#    value = element.attrib.get(name)
+#    return int(value) if value is not None else None
 
 
 # TODO: add methods to determine english version, or whatever else is relevant
@@ -90,7 +90,7 @@ class DatFile:
             versions: list[Metadata] = []
             for stem in stems:
                 metadata = self.stem_to_metadata[stem]
-                if metadata.is_prerelease:
+                if metadata.edition.prerelease:
                     continue  # skip pre-releases
                 versions.append(metadata)
             # TODO: determine the best version while filtering here

@@ -17,10 +17,35 @@ _DATE_PATTERN = re.compile(
 
 
 @dataclass
-class Version:
-    components: str
-    revision: str
+class Edition:
+    version: str = ""
+    revision: str = ""
+    prerelease: str = ""
+    demo: str = ""
     date: datetime.date | None = None
+
+    def __bool__(self) -> bool:
+        return bool(
+            self.version
+            or self.revision
+            or self.prerelease
+            or self.demo
+            or self.date
+        )
+
+    def __str__(self) -> str:
+        output: list[str] = []
+        if self.version:
+            output.append(f"v{self.version}")
+        if self.revision:
+            output.append(f"r{self.revision}")
+        if self.prerelease:
+            output.append(f"[{self.prerelease}]")
+        if self.demo:
+            output.append(f"[{self.demo}]")
+        if self.date:
+            output.append(f"({self.date})")
+        return " ".join(output)
 
 
 def parse_date(value: str) -> datetime.date | None:
@@ -36,7 +61,20 @@ def parse_date(value: str) -> datetime.date | None:
 
 
 _VERSION_PATTERN = re.compile(
-    r"(v|Ver|Version |r|Rev )?(?P<version>\.?(\d|[a-f][^\s]*\d).*)",
+    (
+        r"((?P<prefix>v|Ver|Version |r|Rev )(?P<value>[a-f0-9.]+))"
+        r"|(?P<version>\.?(\d|[a-f]\d[^\s]*\d)[^\s]*)"
+        # r"(?P<version>\.?(\d|[a-f]\d[^\s]*\d)[^\s]*)"
+        # r"(?P<version>[a-f0-9.]+)"
+    ),
+    re.IGNORECASE,
+)
+
+_PRERELEASE_PATTERN = re.compile(
+    (
+        r"(?P<name>alpha|beta|(possible )?proto(type)?)"
+        r"( (?P<iteration>\d+))?"
+    ),
     re.IGNORECASE,
 )
 
@@ -102,6 +140,10 @@ class Region(Enum):
     KOREA = "Korea"
     ASIA = "Asia"
     AUSTRALIA = "Australia"
+    CHINA = "China"
+    ITALY = "Italy"
+    SCANDINAVIA = "Scandinavia"
+    LATIN_AMERICA = "Latin America"
     TAIWAN = "Taiwan"
     BRAZIL = "Brazil"
     PORTUGAL = "Portugal"
@@ -116,6 +158,7 @@ class Region(Enum):
     JAPAN = "Japan"
     SWEDEN = "Sweden"
     FINLAND = "Finland"
+    WORLD = "World"
 
 
 @dataclass
@@ -126,8 +169,10 @@ class Metadata:
     regions: set[Region] = field(default_factory=set)
     languages: set[Language] = field(default_factory=set)
     disc: int | None = None
-    version: str | None = None
-    is_prerelease: bool = False
+    edition: Edition = field(default_factory=Edition)
+    unlicensed: bool = False
+    bad_dump: bool = False
+    alternate: bool = False
     category: str | None = None
 
     _TAG_COMMA_RE: ClassVar[Pattern[str]] = re.compile(r" *[,\+] *")
@@ -148,18 +193,54 @@ class Metadata:
         date: datetime.date | None = None
         disc: int | None = None
         version: str | None = None
-        is_prerelease = False
+        revision: str | None = None
+        prerelease: str = ""
+        demo: str = ""
+        unlicensed = False
+        alternate = False
+        bad_dump = False
         tags: list[str] = []
         for tag in stem_info.tags:
+            lower_tag = tag.lower()
             ###################################################
-            if parsed_date := parse_date(tag):
+            if lower_tag in ["demo", "sample"]:
+                if demo:
+                    raise ValueError(f"Parsed multiple demo tags: {stem}")
+                demo = tag
+            elif lower_tag in ["unl", "unlicensed"]:
+                if unlicensed:
+                    raise ValueError(f"Parsed multiple unl tags: {stem}")
+                unlicensed = True
+            elif lower_tag in ["b"]:
+                if bad_dump:
+                    raise ValueError(f"Parsed multiple b tags: {stem}")
+                bad_dump = True
+            elif lower_tag in ["alt"]:
+                if alternate:
+                    raise ValueError(f"Parsed multible alt tags: {stem}")
+                alternate = True
+            elif parsed_date := parse_date(tag):
                 if date is not None:
                     raise ValueError(f"Parsed multiple dates: {stem}")
                 date = parsed_date
             elif version_match := _VERSION_PATTERN.fullmatch(tag):
-                if version is not None:
-                    raise ValueError(f"Parsed multiple versions: {stem}")
-                version = version_match.group("version")
+                if (version_match.group("prefix") or "")[:1].lower() == "r":
+                    if revision is not None:
+                        raise ValueError(f"Parsed multiple revisions: {stem}")
+                    revision = version_match.group("value")
+                else:
+                    if version is not None:
+                        raise ValueError(f"Parsed multiple versions: {stem}")
+                    version = version_match.group(
+                        "version"
+                    ) or version_match.group("value")
+            elif _PRERELEASE_PATTERN.fullmatch(tag):
+                # NOTE: not using the groups (for now)
+                if prerelease:
+                    raise ValueError(
+                        f"Parsed multiple prerelease tags: {stem}"
+                    )
+                prerelease = tag
             ###################################################
             elif disc_match := _DISC_PATTERN.fullmatch(tag):
                 if disc is not None:
@@ -196,10 +277,7 @@ class Metadata:
                 elif region_results:
                     regions.update(region_results)
                 else:
-                    # normal tag, or part of the title
                     tags.append(tag)
-                    if tag.lower() in ["beta", "alpha"]:
-                        is_prerelease = True
         return Metadata(
             stem=stem,
             title=stem_info.title,
@@ -207,8 +285,16 @@ class Metadata:
             regions=regions,
             languages=languages,
             disc=disc,
-            version=version,
-            is_prerelease=is_prerelease,
+            edition=Edition(
+                version=version or "",
+                revision=revision or "",
+                date=date,
+                prerelease=prerelease,
+                demo=demo,
+            ),
+            unlicensed=unlicensed,
+            bad_dump=bad_dump,
+            alternate=alternate,
             category=category,  # just forwarded, not determined
         )
 
@@ -218,25 +304,3 @@ class Metadata:
 
     def __str__(self) -> str:
         return f"{repr(self.title)}, {repr(self.tags)}"
-
-
-# TODO: remove
-def main_gen(rom_root: Path) -> None:
-    all_tags = set()
-    print("gathering metadata...")
-    with open("metadata.txt", "w") as metadata_file:
-        for path in rom_root.rglob("*"):
-            if path.is_dir():
-                continue
-            try:
-                metadata = Metadata.from_stem(path.stem)
-                all_tags.update(metadata.tags)
-                metadata_file.write(str(metadata) + "\n")
-            except ValueError as e:
-                print(f"Error with file: {path})")
-                print(f"- {e}")
-    print("writing tags...")
-    with open("tags.txt", "w") as tags_file:
-        for tag in all_tags:
-            tags_file.write(tag + "\n")
-    print("done!")
