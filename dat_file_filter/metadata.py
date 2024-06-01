@@ -201,6 +201,7 @@ class Region(Enum):
     FINLAND = "Finland"
     POLAND = "Poland"
     WORLD = "World"
+    RUSSIA = "Russia"
 
 
 @dataclass
