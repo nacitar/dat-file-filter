@@ -72,13 +72,17 @@ _VERSION_PATTERN = re.compile(
 
 _PRERELEASE_PATTERN = re.compile(
     (
-        r"(?P<name>alpha|beta|(possible )?proto(type)?)"
+        r"(?P<name>alpha|beta|([^\s]+ )?promo|(possible )?proto(type)?)"
         r"( (?P<iteration>\d+))?"
     ),
     re.IGNORECASE,
 )
 _DEMO_PATTERN = re.compile(
-    (r"(?P<name>demo|sample)" r"( (?P<iteration>\d+))?"), re.IGNORECASE
+    (
+        r"(?P<name>(tech )?demo|sample|(?P<trial>([^\s]+ )+)?trial)"
+        r"( ((?P<iteration>\d+)|edition|version))?"
+    ),
+    re.IGNORECASE,
 )
 
 _EARLY_ROMAN_NUMERALS = [
@@ -99,6 +103,34 @@ _EARLY_ROMAN_NUMERALS.extend([f"X{value}" for value in _EARLY_ROMAN_NUMERALS])
 _DISC_PATTERN = re.compile(
     rf"[Dd]is[ck] (?P<disc>\d+|[A-Z]|{'|'.join(_EARLY_ROMAN_NUMERALS)})"
 )
+
+_ALTERNATE_PATTERN = re.compile(r"alt( (?P<index>\d+))?", re.IGNORECASE)
+
+_EARLY_JAPANESE_NUMBERS: list[list[str]] = [
+    ["ichi"],
+    ["ni"],
+    ["san"],
+    ["shi", "yon"],
+    ["go"],
+    ["roku"],
+    ["shichi", "nana"],
+    ["hachi"],
+    ["kyū", "ku", "kyu"],
+    ["jū", "ju"],
+]
+_JAPANESE_NUMBER_PATTERN = re.compile(
+    r"([^\s]+ )?([Dd]is[ck] )?(?P<disc>"
+    + "|".join(
+        [
+            re.escape(item)
+            for sublist in _EARLY_JAPANESE_NUMBERS
+            for item in sublist
+        ]
+    )
+    + r")",
+    re.IGNORECASE,
+)
+_DISC_NAME_PATTERN = re.compile(r"(?P<name>[^\s]+) dis[ck]", re.IGNORECASE)
 
 
 @unique
@@ -139,7 +171,9 @@ class Language(Enum):
 @unique
 class Region(Enum):
     USA = "USA"
+    UNITED_KINGDOM = "UK"
     AUSTRIA = "Austria"
+    DENMARK = "Denmark"
     NORWAY = "Norway"
     EUROPE = "Europe"
     KOREA = "Korea"
@@ -163,6 +197,7 @@ class Region(Enum):
     JAPAN = "Japan"
     SWEDEN = "Sweden"
     FINLAND = "Finland"
+    POLAND = "Poland"
     WORLD = "World"
 
 
@@ -174,10 +209,11 @@ class Metadata:
     regions: set[Region] = field(default_factory=set)
     languages: set[Language] = field(default_factory=set)
     disc: int | None = None
+    disc_name: str = ""
     edition: Edition = field(default_factory=Edition)
     unlicensed: bool = False
     bad_dump: bool = False
-    alternate: bool = False
+    alternate: int = 0
     category: str | None = None
 
     _TAG_COMMA_RE: ClassVar[Pattern[str]] = re.compile(r" *[,\+] *")
@@ -197,12 +233,14 @@ class Metadata:
         regions: set[Region] = set()
         date: datetime.date | None = None
         disc: int | None = None
+        disc_name: str = ""
+        japanese_number: int | None = None
         version: str | None = None
         revision: str | None = None
         prerelease: str = ""
         demo: str = ""
         unlicensed = False
-        alternate = False
+        alternate: int = 0
         bad_dump = False
         tags: list[str] = []
         for tag in stem_info.tags:
@@ -211,7 +249,7 @@ class Metadata:
             if _DEMO_PATTERN.fullmatch(tag):
                 if demo:
                     raise ValueError(f"Parsed multiple demo tags: {stem}")
-                demo = tag
+                demo = tag  # NOTE: match has groups we aren't using
             elif lower_tag in ["unl", "unlicensed"]:
                 if unlicensed:
                     raise ValueError(f"Parsed multiple unl tags: {stem}")
@@ -220,10 +258,14 @@ class Metadata:
                 if bad_dump:
                     raise ValueError(f"Parsed multiple b tags: {stem}")
                 bad_dump = True
-            elif lower_tag in ["alt"]:
+            elif alternate_match := _ALTERNATE_PATTERN.fullmatch(tag):
                 if alternate:
                     raise ValueError(f"Parsed multible alt tags: {stem}")
-                alternate = True
+                alternate = int(alternate_match.group("index") or 1)
+            elif disc_name_match := _DISC_NAME_PATTERN.fullmatch(tag):
+                if disc_name:
+                    raise ValueError(f"Parsed multiple disc names: {stem}")
+                disc_name = disc_name_match.group("name")
             elif parsed_date := parse_date(tag):
                 if date is not None:
                     raise ValueError(f"Parsed multiple dates: {stem}")
@@ -258,38 +300,45 @@ class Metadata:
                         disc = int(disc_str)
                     except ValueError:
                         disc = ord(disc_str.lower()) - ord("a")
+            elif japanese_number_match := _JAPANESE_NUMBER_PATTERN.fullmatch(
+                tag
+            ):
+                if japanese_number is not None:
+                    raise ValueError(f"Parsed multiple jp numbers: {stem}")
+                parsed_disc = japanese_number_match.group("disc").lower()
+                for index in range(len(_EARLY_JAPANESE_NUMBERS)):
+                    if parsed_disc in _EARLY_JAPANESE_NUMBERS[index]:
+                        japanese_number = index + 1
+                        break
+                if japanese_number is None:
+                    raise AssertionError(
+                        "number regex and number list mismatched."
+                    )
+            elif language := Metadata._LANGUAGE_LOOKUP.get(tag):
+                languages.add(language)
+            elif region := Metadata._REGION_LOOKUP.get(tag):
+                regions.add(region)
             else:
-                language_results: list[Language] | None = []
-                region_results: list[Region] | None = []
-                tag_tokens = Metadata._TAG_COMMA_RE.split(tag)
-                for token in tag_tokens:
-                    if language_results is not None:
-                        if language := Metadata._LANGUAGE_LOOKUP.get(
-                            token, None
-                        ):
-                            language_results.append(language)
-                        else:
-                            language_results = None
-                    if region_results is not None:
-                        if region := Metadata._REGION_LOOKUP.get(token, None):
-                            region_results.append(region)
-                        else:
-                            region_results = None
-                    if language_results is None and region_results is None:
-                        break  # no need to check further
-                if language_results:
-                    languages.update(language_results)
-                elif region_results:
-                    regions.update(region_results)
-                else:
-                    tags.append(tag)
+                if not tag:
+                    import pdb
+
+                    pdb.set_trace()
+                tags.append(tag)
+        if (
+            disc is not None
+            and japanese_number is not None
+            and disc != japanese_number
+        ):
+            raise ValueError(f"Got different disc index and jp number: {stem}")
+
         return Metadata(
             stem=stem,
             title=stem_info.title,
             tags=tags,
             regions=regions,
             languages=languages,
-            disc=disc,
+            disc=disc or japanese_number or 0,
+            disc_name=disc_name,
             edition=Edition(
                 version=version or "",
                 revision=revision or "",

@@ -18,6 +18,7 @@ class StemInfo:
         # uses negative lookahead to exclude the kaomoji "(^^;"
         .replace(r"O", r"\[|\((?!\^\^;)").replace(r"C", r"[)\]]")
     )
+    _TAG_COMMA_RE: ClassVar[Pattern[str]] = compile(r" *[,\+] *")
 
     @staticmethod
     def from_stem(stem: str) -> StemInfo:
@@ -44,7 +45,11 @@ class StemInfo:
                         raise ValueError(f"mismatched close tag: {stem}")
                     in_open_tag = None
                     if tag_parts:
-                        tags.append(" ".join(tag_parts))
+                        # tags.append(" ".join(tag_parts))
+                        full_tag = " ".join(tag_parts)
+                        for tag in StemInfo._TAG_COMMA_RE.split(full_tag):
+                            if tag:
+                                tags.append(tag)
                         tag_parts = []
                 last_end = match.end()
             elif in_open_tag:

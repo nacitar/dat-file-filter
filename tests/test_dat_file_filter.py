@@ -9,7 +9,7 @@ def test_version() -> None:
 def test_stem_info() -> None:
     # basic parsing + space preservation mid-tag
     assert StemInfo.from_stem("Some Game (En,Fr,Sp) (Jp, Ko, Ch)") == StemInfo(
-        "Some Game", tags=["En,Fr,Sp", "Jp, Ko, Ch"]
+        "Some Game", tags=["En", "Fr", "Sp", "Jp", "Ko", "Ch"]
     )
     # tags act as word separators
     assert StemInfo.from_stem("hello(there)!") == StemInfo(
