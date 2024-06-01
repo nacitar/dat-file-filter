@@ -130,7 +130,9 @@ _JAPANESE_NUMBER_PATTERN = re.compile(
     + r")",
     re.IGNORECASE,
 )
-_DISC_NAME_PATTERN = re.compile(r"(?P<name>[^\s]+) dis[ck]", re.IGNORECASE)
+_DISC_NAME_PATTERN = re.compile(
+    r"cd (?P<name1>.+)|(?P<name2>.+) dis[ck]", re.IGNORECASE
+)
 
 
 @unique
@@ -265,7 +267,9 @@ class Metadata:
             elif disc_name_match := _DISC_NAME_PATTERN.fullmatch(tag):
                 if disc_name:
                     raise ValueError(f"Parsed multiple disc names: {stem}")
-                disc_name = disc_name_match.group("name")
+                disc_name = disc_name_match.group(
+                    "name1"
+                ) or disc_name_match.group("name2")
             elif parsed_date := parse_date(tag):
                 if date is not None:
                     raise ValueError(f"Parsed multiple dates: {stem}")
