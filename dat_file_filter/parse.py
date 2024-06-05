@@ -93,11 +93,12 @@ class DatFile:
                 if metadata.edition.prerelease:
                     continue  # skip pre-releases
                 versions.append(metadata)
+
             # TODO: determine the best version while filtering here
             # which will involve parsing of version numbers/dates
             # and sorting based upon them, grabbing the first/last
-            # game = Game(
-            #    versions=[self.stem_to_metadata[stem] for stem in stems]
-            # )
+            self.title_to_games[title] = Game(
+                versions=[self.stem_to_metadata[stem] for stem in stems]
+            )
 
         # TODO: loop through title_to_stems, removing dupes

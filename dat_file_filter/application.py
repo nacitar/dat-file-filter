@@ -9,7 +9,16 @@ from .parse import DatFile
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Process a .dat file.")
     parser.add_argument(
-        "-t", "--tags", action="store_true", help="Print all unhandled tags"
+        "-u",
+        "--unhandled-tags",
+        action="store_true",
+        help="Print all unhandled tags",
+    )
+    parser.add_argument(
+        "-g",
+        "--game-tag-sets",
+        action="store_true",
+        help="Print games with multiple tag sets.",
     )
     parser.add_argument(
         "-e",
@@ -23,26 +32,49 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(args=argv)
 
     dat_content = DatFile(args.dat_file_path)
-    if args.editions or args.tags:
+    if args.editions or args.unhandled_tags:
         editions: set[str] = set()
-        tags: set[str] = set()
-        for stem, metadata in dat_content.stem_to_metadata.items():
-            if args.editions:
-                if metadata.edition:
-                    editions.add(str(metadata.edition))
-            if args.tags:
-                if metadata.tags:
-                    tags.add(str(metadata.tags))  # NOTE: full group
-        if editions:
-            print("Editions:")
-            for entry in editions:
-                print(f"- {entry}")
-            print()
-        if tags:
-            print("Tags:")
-            for entry in tags:
-                print(f"- {entry}")
-            print()
+        unhandled_tags: set[str] = set()
+        if args.editions or args.unhandled_tags:
+            for stem, metadata in dat_content.stem_to_metadata.items():
+                if args.editions:
+                    if metadata.edition:
+                        editions.add(str(metadata.edition))
+                if args.unhandled_tags:
+                    if metadata.tags:
+                        unhandled_tags.add(
+                            str(sorted(set(metadata.tags)))
+                        )  # NOTE: full group
+                # if metadata.
+            if editions:
+                print("Editions:")
+                for entry in editions:
+                    print(f"- {entry}")
+                print()
+            if unhandled_tags:
+                print("Unhandled Tags:")
+                for tag in unhandled_tags:
+                    print(f"- {tag}")
+                print()
+    if args.game_tag_sets:
+        print("Game Tag Sets:")
+        # TODO: group even further by discs
+        game_tag_sets = {
+            title: sorted(
+                set(
+                    str(sorted(set(version.tags)))
+                    for version in game.versions
+                    if version.tags
+                )
+            )
+            for title, game in dat_content.title_to_games.items()
+        }
+
+        for title, tag_set in game_tag_sets.items():
+            if len(tag_set) > 1:
+                print(title)
+                for tags in tag_set:
+                    print(f"- {tags}")
 
     return 0
 
