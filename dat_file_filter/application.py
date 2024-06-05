@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
-from .metadata import Metadata
+from .metadata import Edition, Metadata
 from .parse import DatFile
 
 
@@ -58,23 +58,75 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print()
     if args.game_tag_sets:
         print("Game Tag Sets:")
-        # TODO: group even further by discs
-        game_tag_sets = {
-            title: sorted(
-                set(
-                    str(sorted(set(version.tags)))
-                    for version in game.versions
-                    if version.tags
-                )
-            )
-            for title, game in dat_content.title_to_games.items()
-        }
+        game_tag_sets: dict[
+            str, dict[Edition, dict[str, dict[str, set[str]]]]
+        ] = {}
 
-        for title, tag_set in game_tag_sets.items():
-            if len(tag_set) > 1:
-                print(title)
-                for tags in tag_set:
-                    print(f"- {tags}")
+        for title, game in dat_content.title_to_games.items():
+            for version in game.versions:
+                tags = sorted(version.tags)
+                game_tag_sets.setdefault(title, {}).setdefault(
+                    version.edition, {}
+                ).setdefault(
+                    " ".join(
+                        sorted(
+                            f"[{region.value}]" for region in version.regions
+                        )
+                    ),
+                    {},
+                ).setdefault(
+                    " ".join(
+                        sorted(
+                            f"[{language.value}]"
+                            for language in version.languages
+                        )
+                    ),
+                    set(),
+                ).add(
+                    str(tags) if tags else ""
+                )
+        for title, edition_to_region in game_tag_sets.items():
+            lines = [[title]]
+            indent = 0
+
+            def add_prefix() -> None:
+                if not lines[-1]:
+                    lines[-1].append(f"{'  ' * indent}-")
+
+            for edition, region_to_language in edition_to_region.items():
+                if len(edition_to_region) > 1:
+                    indent += 1
+                    lines.append([])
+                    add_prefix()
+                lines[-1].append(str(edition) or "[No-Version]")
+                for region, language_to_tag_set in region_to_language.items():
+                    if len(region_to_language) > 1:
+                        indent += 1
+                        lines.append([])
+                        add_prefix()
+                    lines[-1].append(str(region) or "[No-Region]")
+                    for language, tag_set in language_to_tag_set.items():
+                        if len(language_to_tag_set) > 1:
+                            indent += 1
+                            lines.append([])
+                            add_prefix()
+                        lines[-1].append(language or "[No-Language]")
+                        for tag_string in tag_set:
+                            if len(tag_set) > 1:
+                                indent += 1
+                                lines.append([])
+                                add_prefix()
+                            lines[-1].append(tag_string or "[No-Tags]")
+                            if len(tag_set) > 1:
+                                indent -= 1
+                        if len(language_to_tag_set) > 1:
+                            indent -= 1
+                    if len(region_to_language) > 1:
+                        indent -= 1
+                if len(edition_to_region) > 1:
+                    indent -= 1
+            for line in lines:
+                print(" ".join(line))
 
     return 0
 

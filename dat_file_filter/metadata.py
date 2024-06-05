@@ -16,7 +16,7 @@ _DATE_PATTERN = re.compile(
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class Edition:
     version: str = ""
     revision: str = ""
