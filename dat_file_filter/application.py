@@ -33,13 +33,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     dat_content = DatFile(args.dat_file_path)
     if args.editions or args.unhandled_tags:
-        editions: set[str] = set()
+        editions: set[Edition] = set()
         unhandled_tags: set[str] = set()
         if args.editions or args.unhandled_tags:
             for stem, metadata in dat_content.stem_to_metadata.items():
                 if args.editions:
                     if metadata.edition:
-                        editions.add(str(metadata.edition))
+                        editions.add(metadata.edition)
                 if args.unhandled_tags:
                     if metadata.tags:
                         unhandled_tags.add(
@@ -48,7 +48,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 # if metadata.
             if editions:
                 print("Editions:")
-                for entry in editions:
+                for entry in sorted(editions):
                     print(f"- {entry}")
                 print()
             if unhandled_tags:

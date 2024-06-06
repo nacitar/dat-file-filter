@@ -16,20 +16,40 @@ _DATE_PATTERN = re.compile(
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=True)
+class Date:
+    date: datetime.date | None = None
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, Date):
+            return NotImplemented
+        # Treat None as less than any date
+        return (self.date is None, self.date) < (
+            other.date is None,
+            other.date,
+        )
+
+    def __bool__(self) -> bool:
+        return bool(self.date)
+
+    def __str__(self) -> str:
+        return str(self.date) if self.date else ""
+
+
+@dataclass(frozen=True, eq=True, order=True)
 class Edition:
+    demo: str = ""
+    prerelease: str = ""
     version: str = ""
     revision: str = ""
-    prerelease: str = ""
-    demo: str = ""
-    date: datetime.date | None = None
+    date: Date = field(default_factory=lambda: Date(None))
 
     def __bool__(self) -> bool:
         return bool(
-            self.version
-            or self.revision
+            self.demo
             or self.prerelease
-            or self.demo
+            or self.version
+            or self.revision
             or self.date
         )
 
@@ -48,7 +68,7 @@ class Edition:
         return " ".join(output)
 
 
-def parse_date(value: str) -> datetime.date | None:
+def parse_date(value: str) -> Date | None:
     match = _DATE_PATTERN.fullmatch(value)
     if not match:
         return None
@@ -57,7 +77,7 @@ def parse_date(value: str) -> datetime.date | None:
         int(group) if group and group.lower() != "xx" else 1
         for group in (match.group("month"), match.group("day"))
     )
-    return datetime.date(int(match.group("year")), month, day)
+    return Date(datetime.date(int(match.group("year")), month, day))
 
 
 _VERSION_PATTERN = re.compile(
@@ -234,7 +254,7 @@ class Metadata:
 
         languages: set[Language] = set()
         regions: set[Region] = set()
-        date: datetime.date | None = None
+        date = Date(None)
         disc: int | None = None
         disc_name: str = ""
         japanese_number: int | None = None
@@ -272,7 +292,7 @@ class Metadata:
                     "name1"
                 ) or disc_name_match.group("name2")
             elif parsed_date := parse_date(tag):
-                if date is not None:
+                if date:
                     raise ValueError(f"Parsed multiple dates: {stem}")
                 date = parsed_date
             elif version_match := _VERSION_PATTERN.fullmatch(tag):
