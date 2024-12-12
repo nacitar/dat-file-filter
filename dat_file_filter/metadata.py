@@ -157,8 +157,8 @@ _DISC_NAME_PATTERN = re.compile(
 
 @unique
 class Language(Enum):
-    ENGLISH = "En"
     AMERICAN_ENGLISH = "En-US"
+    ENGLISH = "En"
     BRITISH_ENGLISH = "En-GB"
     FRENCH = "Fr"
     CANADIAN_FRENCH = "Fr-CA"
@@ -247,6 +247,31 @@ class Metadata:
     _REGION_LOOKUP: ClassVar[dict[str, Region]] = {
         member.value: member for member in Region
     }
+
+    def english_priority(self) -> int:
+        is_american_english = Language.AMERICAN_ENGLISH in self.languages
+        is_english = Language.ENGLISH in self.languages
+        is_british_english = Language.BRITISH_ENGLISH in self.languages
+        any_english = is_american_english or is_english or is_british_english
+        not_only_nonenglish = not self.languages or any_english
+        if Region.USA in self.regions and not_only_nonenglish:
+            return 1
+        if is_american_english:
+            return 2
+        if is_english:
+            return 3
+        if is_british_english:
+            return 4
+        if not_only_nonenglish:
+            if Region.CANADA in self.regions:
+                return 5
+            if Region.UNITED_KINGDOM in self.regions:
+                return 6
+            if Region.AUSTRALIA in self.regions:
+                return 7
+            if Region.NEW_ZEALAND in self.regions:
+                return 8
+        return 0
 
     @staticmethod
     def from_stem(stem: str, *, category: str | None = None) -> Metadata:
@@ -345,9 +370,7 @@ class Metadata:
                 regions.add(region)
             else:
                 if not tag:
-                    import pdb
-
-                    pdb.set_trace()
+                    raise RuntimeError("Received blank tag; debug things!")
                 tags.append(tag)
         if (
             disc is not None

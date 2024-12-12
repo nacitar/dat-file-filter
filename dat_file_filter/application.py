@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 
 from .metadata import Edition, Metadata
 from .parse import DatFile
@@ -9,16 +9,16 @@ from .parse import DatFile
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Process a .dat file.")
     parser.add_argument(
-        "-u",
-        "--unhandled-tags",
-        action="store_true",
-        help="Print all unhandled tags",
-    )
-    parser.add_argument(
         "-g",
         "--game-tag-sets",
         action="store_true",
         help="Print games with multiple tag sets.",
+    )
+    parser.add_argument(
+        "-u",
+        "--unhandled-tags",
+        action="store_true",
+        help="Print all unhandled tags",
     )
     parser.add_argument(
         "-e",
@@ -27,35 +27,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Print all custom editions.",
     )
     parser.add_argument(
+        "-c", "--categories", action="store_true", help="Print all categories."
+    )
+    parser.add_argument(
+        "-b",
+        "--best-versions",
+        action="store_true",
+        help="Print best version of every game.",
+    )
+    parser.add_argument(
         "dat_file_path", type=str, help="Path to the .dat file"
     )
     args = parser.parse_args(args=argv)
 
-    dat_content = DatFile(args.dat_file_path)
-    if args.editions or args.unhandled_tags:
-        editions: set[Edition] = set()
-        unhandled_tags: set[str] = set()
-        if args.editions or args.unhandled_tags:
-            for stem, metadata in dat_content.stem_to_metadata.items():
-                if args.editions:
-                    if metadata.edition:
-                        editions.add(metadata.edition)
-                if args.unhandled_tags:
-                    if metadata.tags:
-                        unhandled_tags.add(
-                            str(sorted(set(metadata.tags)))
-                        )  # NOTE: full group
-                # if metadata.
-            if editions:
-                print("Editions:")
-                for entry in sorted(editions):
-                    print(f"- {entry}")
-                print()
-            if unhandled_tags:
-                print("Unhandled Tags:")
-                for tag in unhandled_tags:
-                    print(f"- {tag}")
-                print()
+    metadata_filter: Callable[[Metadata], bool] = lambda metadata: (
+        not metadata.edition.prerelease and not metadata.edition.demo
+    )
+    dat_content = DatFile(args.dat_file_path, metadata_filter=metadata_filter)
+    if args.best_versions:
+        print("Best Versions:")
+        for title, game in dat_content.title_to_games.items():
+            best_version = game.english_version()
+            if best_version:
+                print(f"- {best_version}")
+
     if args.game_tag_sets:
         print("Game Tag Sets:")
         game_tag_sets: dict[
@@ -63,14 +58,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         ] = {}
 
         for title, game in dat_content.title_to_games.items():
-            for version in game.versions:
-                tags = sorted(version.tags)
+            for metadata in game.versions:
+                tags = sorted(metadata.tags)
                 game_tag_sets.setdefault(title, {}).setdefault(
-                    version.edition, {}
+                    metadata.edition, {}
                 ).setdefault(
                     " ".join(
                         sorted(
-                            f"[{region.value}]" for region in version.regions
+                            f"[{region.value}]" for region in metadata.regions
                         )
                     ),
                     {},
@@ -78,7 +73,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     " ".join(
                         sorted(
                             f"[{language.value}]"
-                            for language in version.languages
+                            for language in metadata.languages
                         )
                     ),
                     set(),
@@ -98,7 +93,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     indent += 1
                     lines.append([])
                     add_prefix()
-                lines[-1].append(str(edition) or "[No-Version]")
+                lines[-1].append(str(edition) or "[No-Edition]")
                 for region, language_to_tag_set in region_to_language.items():
                     if len(region_to_language) > 1:
                         indent += 1
@@ -127,6 +122,39 @@ def main(argv: Sequence[str] | None = None) -> int:
                     indent -= 1
             for line in lines:
                 print(" ".join(line))
+        print()
+    if args.editions or args.unhandled_tags or args.categories:
+        editions: set[Edition] = set()
+        unhandled_tags: dict[str, list[Metadata]] = {}
+        categories: set[str] = set()
+        for stem, metadata in dat_content.stem_to_metadata.items():
+            if args.editions:
+                if metadata.edition:
+                    editions.add(metadata.edition)
+            if args.unhandled_tags and metadata.tags:
+                unhandled_tags.setdefault(
+                    str(sorted(set(metadata.tags))), []  # full group
+                ).append(metadata)
+            if args.categories and metadata.category:
+                categories.add(metadata.category)
+            # if metadata.
+        if editions:
+            print("Editions:")
+            for edition in sorted(editions):
+                print(f"- {edition}")
+            print()
+        if unhandled_tags:
+            print("Unhandled Tags:")
+            for tag, metadata_list in unhandled_tags.items():
+                print(f"- {tag}")
+                for metadata in metadata_list:
+                    print(f"  - {metadata.stem}")
+            print()
+        if categories:
+            print("Categories:")
+            for category in sorted(categories):
+                print(f"- {category}")
+            print()
 
     return 0
 
