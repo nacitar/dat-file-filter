@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import re
 from dataclasses import dataclass, field
-from enum import Enum, unique
+from enum import StrEnum, unique
 from pathlib import Path
 from re import Pattern
 from typing import ClassVar
@@ -34,38 +34,6 @@ class Date:
 
     def __str__(self) -> str:
         return str(self.date) if self.date else ""
-
-
-@dataclass(frozen=True, eq=True, order=True)
-class Edition:
-    demo: str = ""
-    prerelease: str = ""
-    version: str = ""
-    revision: str = ""
-    date: Date = field(default_factory=lambda: Date(None))
-
-    def __bool__(self) -> bool:
-        return bool(
-            self.demo
-            or self.prerelease
-            or self.version
-            or self.revision
-            or self.date
-        )
-
-    def __str__(self) -> str:
-        output: list[str] = []
-        if self.version:
-            output.append(f"v{self.version}")
-        if self.revision:
-            output.append(f"r{self.revision}")
-        if self.prerelease:
-            output.append(f"[{self.prerelease}]")
-        if self.demo:
-            output.append(f"[{self.demo}]")
-        if self.date:
-            output.append(f"({self.date})")
-        return " ".join(output)
 
 
 def parse_date(value: str) -> Date | None:
@@ -156,7 +124,7 @@ _DISC_NAME_PATTERN = re.compile(
 
 
 @unique
-class Language(Enum):
+class Language(StrEnum):
     AMERICAN_ENGLISH = "En-US"
     ENGLISH = "En"
     BRITISH_ENGLISH = "En-GB"
@@ -191,7 +159,7 @@ class Language(Enum):
 
 
 @unique
-class Region(Enum):
+class Region(StrEnum):
     USA = "USA"
     UNITED_KINGDOM = "UK"
     AUSTRIA = "Austria"
@@ -224,29 +192,136 @@ class Region(Enum):
     RUSSIA = "Russia"
 
 
-@dataclass
-class Metadata:
-    stem: str
-    title: str
-    tags: list[str] = field(default_factory=list)
-    regions: set[Region] = field(default_factory=set)
-    languages: set[Language] = field(default_factory=set)
-    disc: int | None = None
-    disc_name: str = ""
-    edition: Edition = field(default_factory=Edition)
-    unlicensed: bool = False
-    bad_dump: bool = False
+@dataclass(frozen=True, eq=True, order=True)
+class Edition:
+    arcade: bool = False
+    version: str = ""
+    revision: str = ""
+    prerelease: str = ""
+    demo: str = ""
+    date: Date = field(default_factory=lambda: Date(None))
     alternate: int = 0
-    category: str | None = None
+    switch: bool = False
+    steam: bool = False
+    virtual_console: bool = False
+    classic_mini: bool = False
+    nintendo_power: bool = False  # updated versions for certain Japanese games
 
-    _TAG_COMMA_RE: ClassVar[Pattern[str]] = re.compile(r" *[,\+] *")
+    def __bool__(self) -> bool:
+        return bool(
+            self.arcade
+            or self.version
+            or self.revision
+            or self.prerelease
+            or self.demo
+            or self.date
+            or self.alternate
+            or self.switch
+            or self.steam
+            or self.virtual_console
+            or self.classic_mini
+            or self.nintendo_power
+        )
 
-    _LANGUAGE_LOOKUP: ClassVar[dict[str, Language]] = {
-        member.value: member for member in Language
-    }
-    _REGION_LOOKUP: ClassVar[dict[str, Region]] = {
-        member.value: member for member in Region
-    }
+    def __str__(self) -> str:
+        output: list[str] = []
+        if self.arcade:
+            output.append("(Arcade)")
+        if self.version:
+            output.append(f"v{self.version}")
+        if self.revision:
+            if not self.revision[0].isdigit():
+                output.append(f"Rev {self.revision}")
+            else:
+                output.append(f"r{self.revision}")
+        if self.prerelease:
+            output.append(f"[{self.prerelease}]")
+        if self.demo:
+            output.append(f"[{self.demo}]")
+        if self.date:
+            output.append(f"({self.date})")
+        if self.alternate:
+            if self.alternate > 1:
+                output.append(f"(Alt {self.alternate})")
+            else:
+                output.append("(Alt)")
+        if self.switch:
+            output.append("(Switch)")
+        if self.steam:
+            output.append("(Steam)")
+        if self.virtual_console:
+            output.append("(Virtual Console)")
+        if self.classic_mini:
+            output.append("(Classic Mini)")
+        if self.nintendo_power:
+            output.append("(Nintendo Power)")
+        return " ".join(output)
+
+
+@dataclass(frozen=True, eq=True, order=True)
+class Disc:
+    name: str = ""
+    number: int | None = None
+
+    def __bool__(self) -> bool:
+        return bool(self.name or self.number)
+
+    def __str__(self) -> str:
+        output: list[str] = []
+        if self.name:
+            output.append(self.name)
+        if self.number:
+            output.append(f"Disc {self.number}")
+        if output:
+            if len(output) == 1:
+                return output[0]
+            return f"({", ".join(output)})"
+        return ""
+
+
+@dataclass(frozen=True, eq=True, order=True)
+class Variation:
+    title: str = ""
+    edition: Edition = field(default_factory=Edition)
+    disc: Disc = field(default_factory=Disc)
+
+    def __bool__(self) -> bool:
+        return bool(self.title or self.edition or self.disc)
+
+    def __str__(self) -> str:
+        output: list[str] = []
+        if self.title:
+            output.append(self.title)
+        if self.edition:
+            output.append(str(self.edition))
+        if self.disc:
+            output.append(str(self.disc))
+        return " ".join(output)
+
+
+@dataclass(frozen=True, eq=True, order=True)
+class Localization:
+    _sort_key: tuple[int, tuple[Region, ...], tuple[Language, ...]] = field(
+        init=False, compare=True, repr=False
+    )
+    regions: frozenset[Region] = field(
+        default_factory=frozenset, compare=False
+    )
+    languages: frozenset[Language] = field(
+        default_factory=frozenset, compare=False
+    )
+
+    def __post_init__(self) -> None:
+        sort_key: tuple[int, tuple[Region, ...], tuple[Language, ...]] = (
+            self.english_priority(),
+            tuple(sorted(self.regions)),
+            tuple(sorted(self.languages)),
+        )
+        # because frozen=True
+        object.__setattr__(self, "_sort_key", sort_key)
+
+    def __bool__(self) -> bool:
+        return bool(self.regions or self.languages)
 
     def english_priority(self) -> int:
         is_american_english = Language.AMERICAN_ENGLISH in self.languages
@@ -273,6 +348,65 @@ class Metadata:
                 return 8
         return 0
 
+    def __str__(self) -> str:
+        output: list[str] = []
+        if self.regions:
+            output.append(
+                "["
+                + ", ".join(sorted(region.value for region in self.regions))
+                + "]"
+            )
+        if self.languages:
+            output.append(
+                "["
+                + ", ".join(
+                    sorted(language.value for language in self.languages)
+                )
+                + "]"
+            )
+        if output:
+            return " ".join(output)
+        return "Unlocalized"
+
+
+@dataclass(frozen=True, eq=True, order=True)
+class Tags:
+    _sort_key: tuple[str, ...] = field(init=False, compare=True, repr=False)
+    values: frozenset[str] = field(default_factory=frozenset, compare=False)
+
+    def __post_init__(self) -> None:
+        sort_key: tuple[str, ...] = tuple(sorted(self.values))
+        # because frozen=True
+        object.__setattr__(self, "_sort_key", sort_key)
+
+    def __bool__(self) -> bool:
+        return bool(self.values)
+
+    def __str__(self) -> str:
+        if self.values:
+            return " ".join(f"[{value}]" for value in self.values)
+        return "Untagged"
+
+
+@dataclass
+class Metadata:
+    stem: str
+    variation: Variation = field(default_factory=Variation)
+    unhandled_tags: Tags = field(default_factory=Tags)
+    localization: Localization = field(default_factory=Localization)
+    unlicensed: bool = False
+    bad_dump: bool = False
+    category: str | None = None
+
+    _TAG_COMMA_RE: ClassVar[Pattern[str]] = re.compile(r" *[,\+] *")
+
+    _LANGUAGE_LOOKUP: ClassVar[dict[str, Language]] = {
+        member.value: member for member in Language
+    }
+    _REGION_LOOKUP: ClassVar[dict[str, Region]] = {
+        member.value: member for member in Region
+    }
+
     @staticmethod
     def from_stem(stem: str, *, category: str | None = None) -> Metadata:
         stem_info = StemInfo.from_stem(stem)
@@ -280,17 +414,23 @@ class Metadata:
         languages: set[Language] = set()
         regions: set[Region] = set()
         date = Date(None)
-        disc: int | None = None
+        disc_number: int | None = None
         disc_name: str = ""
         japanese_number: int | None = None
         version: str | None = None
         revision: str | None = None
         prerelease: str = ""
+        arcade: bool = False
+        switch: bool = False
+        steam: bool = False
+        virtual_console: bool = False
+        classic_mini: bool = False
+        nintendo_power: bool = False
         demo: str = ""
         unlicensed = False
         alternate: int = 0
         bad_dump = False
-        tags: list[str] = []
+        unhandles_tag_values: list[str] = []
         for tag in stem_info.tags:
             lower_tag = tag.lower()
             ###################################################
@@ -298,6 +438,34 @@ class Metadata:
                 if demo:
                     raise ValueError(f"Parsed multiple demo tags: {stem}")
                 demo = tag  # NOTE: match has groups we aren't using
+            elif lower_tag in ["arcade"]:
+                if arcade:
+                    raise ValueError(f"Parsed multiple arcade tags: {stem}")
+                arcade = True
+            elif lower_tag in ["switch", "switch online"]:
+                if switch:
+                    raise ValueError(f"Parsed multiple switch tags: {stem}")
+                switch = True
+            elif lower_tag in ["steam"]:
+                if steam:
+                    raise ValueError(f"Parsed multiple steam tags: {stem}")
+                steam = True
+            elif lower_tag in ["virtual console"]:
+                if virtual_console:
+                    raise ValueError(
+                        f"Parsed multiple virtual console tags: {stem}"
+                    )
+                virtual_console = True
+            elif lower_tag in ["classic mini"]:
+                if classic_mini:
+                    raise ValueError(
+                        f"Parsed multiple classic mini tags: {stem}"
+                    )
+                classic_mini = True
+            elif lower_tag in ["np"]:
+                if nintendo_power:
+                    raise ValueError(f"Parsed multiple np tags: {stem}")
+                nintendo_power = True
             elif lower_tag in ["unl", "unlicensed"]:
                 if unlicensed:
                     raise ValueError(f"Parsed multiple unl tags: {stem}")
@@ -340,16 +508,16 @@ class Metadata:
                 prerelease = tag
             ###################################################
             elif disc_match := _DISC_PATTERN.fullmatch(tag):
-                if disc is not None:
+                if disc_number is not None:
                     raise ValueError(f"Parsed multiple discs: {stem}")
                 disc_str = disc_match.group("disc")
                 try:
-                    disc = _EARLY_ROMAN_NUMERALS.index(disc_str) + 1
+                    disc_number = _EARLY_ROMAN_NUMERALS.index(disc_str) + 1
                 except ValueError:
                     try:
-                        disc = int(disc_str)
+                        disc_number = int(disc_str)
                     except ValueError:
-                        disc = ord(disc_str.lower()) - ord("a")
+                        disc_number = ord(disc_str.lower()) - ord("a")
             elif japanese_number_match := _JAPANESE_NUMBER_PATTERN.fullmatch(
                 tag
             ):
@@ -371,32 +539,40 @@ class Metadata:
             else:
                 if not tag:
                     raise RuntimeError("Received blank tag; debug things!")
-                tags.append(tag)
+                unhandles_tag_values.append(tag)
         if (
-            disc is not None
+            disc_number is not None
             and japanese_number is not None
-            and disc != japanese_number
+            and disc_number != japanese_number
         ):
             raise ValueError(f"Got different disc index and jp number: {stem}")
 
         return Metadata(
             stem=stem,
-            title=stem_info.title,
-            tags=tags,
-            regions=regions,
-            languages=languages,
-            disc=disc or japanese_number or 0,
-            disc_name=disc_name,
-            edition=Edition(
-                version=version or "",
-                revision=revision or "",
-                date=date,
-                prerelease=prerelease,
-                demo=demo,
+            unhandled_tags=Tags(values=frozenset(unhandles_tag_values)),
+            localization=Localization(
+                regions=frozenset(regions), languages=frozenset(languages)
+            ),
+            variation=Variation(
+                title=stem_info.title,
+                edition=Edition(
+                    arcade=arcade,
+                    version=version or "",
+                    revision=revision or "",
+                    date=date,
+                    prerelease=prerelease,
+                    demo=demo,
+                    alternate=alternate,
+                    switch=switch,
+                    steam=steam,
+                    virtual_console=virtual_console,
+                    classic_mini=classic_mini,
+                    nintendo_power=nintendo_power,
+                ),
+                disc=Disc(name=disc_name, number=disc_number),
             ),
             unlicensed=unlicensed,
             bad_dump=bad_dump,
-            alternate=alternate,
             category=category,  # just forwarded, not determined
         )
 
@@ -405,4 +581,4 @@ class Metadata:
         return Metadata.from_stem(path.stem, category=category)
 
     def __str__(self) -> str:
-        return f"{repr(self.title)}, {repr(self.tags)}"
+        return f"{repr(self.variation.title)}, {repr(self.unhandled_tags)}"

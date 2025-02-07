@@ -6,7 +6,7 @@ from itertools import chain
 from pathlib import Path
 from typing import Callable
 
-from .metadata import Metadata
+from .metadata import Localization, Metadata, Tags, Variation
 
 
 def get_child_text(element: ET.Element, name: str) -> str:
@@ -14,17 +14,31 @@ def get_child_text(element: ET.Element, name: str) -> str:
     return child.text or "" if child is not None else ""
 
 
-# def get_int_attribute(element: ET.Element, name: str) -> int | None:
-#    value = element.attrib.get(name)
-#    return int(value) if value is not None else None
+# TODO:
+# - skip bad dumps
 
 
-# TODO: figure out how to differentiate editions of the game w/r to the english
-# version.  You'll have an english version of each variation, and I suppose
-# they should all be provided.
 @dataclass
 class Game:
     versions: list[Metadata]
+
+    def variations(
+        self,
+    ) -> dict[Variation, dict[Localization, dict[Tags, Metadata]]]:
+        variation_lookup: dict[
+            Variation, dict[Localization, dict[Tags, Metadata]]
+        ] = {}
+        for metadata in self.versions:
+            tags_to_metadata = variation_lookup.setdefault(
+                metadata.variation, {}
+            ).setdefault(metadata.localization, {})
+
+            if metadata.unhandled_tags in tags_to_metadata:
+                raise ValueError(
+                    f"Multiple game roms with same sorting: {metadata.stem}"
+                )
+            tags_to_metadata[metadata.unhandled_tags] = metadata
+        return variation_lookup
 
     def english_version(self) -> Metadata | None:
         priorities: set[int] = set()
@@ -32,7 +46,7 @@ class Game:
         best_priority: int = 0
 
         for metadata in self.versions:
-            priority = metadata.english_priority()
+            priority = metadata.localization.english_priority()
             if not priority:
                 continue
             if not best_metadata or priority < best_priority:
@@ -40,10 +54,10 @@ class Game:
                 best_priority = priority
             if priority in priorities:
                 for metadata in self.versions:
-                    print(f"{metadata.english_priority()} {metadata}")
-                import pdb
-
-                pdb.set_trace()
+                    print(
+                        f"{metadata.localization.english_priority()}"
+                        f" {metadata}"  # {metadata.stem}"
+                    )
                 raise ValueError(f"Multiple versions of priority: {priority}")
             priorities.add(priority)
         return best_metadata
@@ -108,18 +122,22 @@ class DatFile:
                 (id_to_metadata[cloneid] for cloneid in clones),
             ):
                 stems.add(metadata.stem)
-                self.title_to_stems[metadata.title] = stems
+                self.title_to_stems[metadata.variation.title] = stems
         # groups using the title
         for stem, metadata in self.stem_to_metadata.items():
-            stems = self.title_to_stems.setdefault(metadata.title, set())
+            stems = self.title_to_stems.setdefault(
+                metadata.variation.title, set()
+            )
             stems.add(stem)
 
         self.title_to_games: dict[str, Game] = {}
 
         for title, stems in self.title_to_stems.items():
-            # TODO: determine the best version while filtering here
-            # which will involve parsing of version numbers/dates
-            # and sorting based upon them, grabbing the first/last
+            # TODO: this will prcoess english/japanese versions together
+            # but we probably only want to add it under the english name
+            # if available
+            # Probably just loop through it, taking the title of the one
+            # with the highest english priority?
             self.title_to_games[title] = Game(
                 versions=[self.stem_to_metadata[stem] for stem in stems]
             )

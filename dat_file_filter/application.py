@@ -41,31 +41,62 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(args=argv)
 
     metadata_filter: Callable[[Metadata], bool] = lambda metadata: (
-        not metadata.edition.prerelease and not metadata.edition.demo
+        not metadata.variation.edition.prerelease
+        and not metadata.variation.edition.demo
     )
     dat_content = DatFile(args.dat_file_path, metadata_filter=metadata_filter)
     if args.best_versions:
-        print("Best Versions:")
+        print("Variations:")
+        # rom_count = 0
+
+        # TODO: fix so we don't process the same games by a different title
+        # the game_id stuff doesn't work, perhaps by not looping over titles,
+        # or even preventing multiple titles from entering the list.
+        processed_games: set[int] = set()
         for title, game in dat_content.title_to_games.items():
-            best_version = game.english_version()
-            if best_version:
-                print(f"- {best_version}")
+            game_id = id(game)
+            if title == "Legend of Zelda, The - A Link to the Past":
+                print(f"LTTP: {game_id}")
+            elif title == "Zelda no Densetsu - Kamigami no Triforce":
+                print(f"LTTP J: {game_id}")
+            if game_id in processed_games:
+                continue
+            processed_games.add(game_id)
+            print(title)
+            for (
+                variation,
+                localization_tags_metadata,
+            ) in game.variations().items():
+                print(f"- {variation}")
+                for (
+                    localization,
+                    tags_metadata,
+                ) in localization_tags_metadata.items():
+                    print(f"  - {localization}")
+                    for tags, metadata in tags_metadata.items():
+                        print(f"    - {tags}: {metadata.stem}")
+                        # rom_count += 1
+        # if rom_count > 3:
+        #        import pdb
+        #    pdb.set_trace()
 
     if args.game_tag_sets:
         print("Game Tag Sets:")
+        # title, Edition, regions, languages, tags
         game_tag_sets: dict[
             str, dict[Edition, dict[str, dict[str, set[str]]]]
         ] = {}
 
         for title, game in dat_content.title_to_games.items():
             for metadata in game.versions:
-                tags = sorted(metadata.tags)
+                tag_values = sorted(metadata.unhandled_tags.values)
                 game_tag_sets.setdefault(title, {}).setdefault(
-                    metadata.edition, {}
+                    metadata.variation.edition, {}
                 ).setdefault(
                     " ".join(
                         sorted(
-                            f"[{region.value}]" for region in metadata.regions
+                            f"[{region.value}]"
+                            for region in metadata.localization.regions
                         )
                     ),
                     {},
@@ -73,12 +104,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     " ".join(
                         sorted(
                             f"[{language.value}]"
-                            for language in metadata.languages
+                            for language in metadata.localization.languages
                         )
                     ),
                     set(),
                 ).add(
-                    str(tags) if tags else ""
+                    str(tag_values) if tag_values else ""
                 )
         for title, edition_to_region in game_tag_sets.items():
             lines = [[title]]
@@ -129,12 +160,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         categories: set[str] = set()
         for stem, metadata in dat_content.stem_to_metadata.items():
             if args.editions:
-                if metadata.edition:
-                    editions.add(metadata.edition)
-            if args.unhandled_tags and metadata.tags:
-                unhandled_tags.setdefault(
-                    str(sorted(set(metadata.tags))), []  # full group
-                ).append(metadata)
+                if metadata.variation.edition:
+                    editions.add(metadata.variation.edition)
+            if args.unhandled_tags and metadata.unhandled_tags:
+                if metadata.unhandled_tags:
+                    unhandled_tags.setdefault(
+                        str(sorted(set(metadata.unhandled_tags.values))),
+                        [],  # full group
+                    ).append(metadata)
             if args.categories and metadata.category:
                 categories.add(metadata.category)
             # if metadata.
@@ -161,7 +194,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 # for diagnostics
 def generate_reports(rom_root: Path) -> None:
-    all_tags = set()
+    all_tags: set[str] = set()
     print("gathering metadata...")
     with open("metadata.txt", "w") as metadata_file:
         for path in rom_root.rglob("*"):
@@ -169,7 +202,7 @@ def generate_reports(rom_root: Path) -> None:
                 continue
             try:
                 metadata = Metadata.from_stem(path.stem)
-                all_tags.update(metadata.tags)
+                all_tags.update(metadata.unhandled_tags.values)
                 metadata_file.write(str(metadata) + "\n")
             except ValueError as e:
                 print(f"Error with file: {path})")
