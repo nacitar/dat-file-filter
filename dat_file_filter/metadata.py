@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import datetime
 import re
-from dataclasses import dataclass, field
+from dataclasses import KW_ONLY, dataclass, field
 from enum import StrEnum, unique
 from pathlib import Path
 from re import Match, Pattern
-from typing import Callable, ClassVar, Generic, Sequence, TypeVar
+from typing import Callable, ClassVar
 
 from .stem_info import StemInfo
-
-T = TypeVar("T", bound=object)  # T is non-none
 
 
 @dataclass(frozen=True, eq=True)
@@ -373,106 +371,63 @@ class Tags:
         return "Untagged"
 
 
-def tag_list_pattern(
-    tags: Sequence[str], *, case_insensitive: bool = True
-) -> Pattern[str]:
-    return re.compile(
-        "|".join(re.escape(tag) for tag in tags),
-        re.IGNORECASE if case_insensitive else 0,
-    )
+def FULL_TAG_EXTRACTOR(match: Match[str]) -> str:
+    return match.string
 
 
 @dataclass
-class BaseTagMatcher(Generic[T]):
+class PatternParser:
     pattern: re.Pattern[str]
-    extractor: Callable[[Match[str]], T]
-    value: T = field(init=False)
+    extractor: Callable[[Match[str]], str] = FULL_TAG_EXTRACTOR
 
-    def __post_init__(self) -> None:
-        """Initialize value safely in subclasses."""
-        if not hasattr(self, "value"):
-            raise NotImplementedError(
-                "Subclasses must define a default value for 'value'."
-            )
+    @classmethod
+    def from_tags(
+        cls,
+        tags: list[str],
+        extractor: Callable[[Match[str]], str] = FULL_TAG_EXTRACTOR,
+        *,
+        case_sensitive: bool = False,
+    ) -> PatternParser:
+        return cls(
+            re.compile(
+                "|".join(re.escape(tag) for tag in tags),
+                0 if case_sensitive else re.IGNORECASE,
+            ),
+            extractor,
+        )
+
+    def __call__(self, tag: str) -> str:
+        if match := self.pattern.fullmatch(tag):
+            return self.extractor(match)
+        return ""
+
+
+@dataclass
+class TagMatcher:
+    parser: PatternParser
+    value: str = ""
+    _: KW_ONLY
+    allow_duplicates: bool = False
 
     def __call__(self, tag: str) -> bool:
-        if match := self.pattern.fullmatch(tag):
+        if value := self.parser(tag):
             if self.value:
-                raise ValueError(f"Processed multiple '{tag}' equivalent tags")
-            self.value = self.extractor(match)
+                if not self.allow_duplicates or value != self.value:
+                    raise ValueError(
+                        f"Parsed multiple '{tag}' equivalent tags"
+                    )
+            self.value = value
             return True
         return False
 
     def __bool__(self) -> bool:
         return bool(self.value)
 
-class TagPresenceMatcher:
-    def __init__(
-        self,
-        tag_names: list[str],
-        *,
-        case_sensitive: bool = False,
-        allow_multiple: bool = False,
-    ):
-        self.case_sensitive = case_sensitive
-        self.allow_multiple = allow_multiple
-        self.tag_names = {
-            tag.lower() if not self.case_sensitive else tag
-            for tag in tag_names
-            if tag  # Filters out empty strings
-        }
-        if not self.tag_names:
-            raise ValueError("No non-empty tag names specified.")
-        self.clear()
+    def __str__(self) -> str:
+        return self.value
 
-    def clear(self) -> None:
-        self.present = False
-
-    def __call__(self, tag: str) -> bool:
-        if tag in self.tag_names:
-            if not self.allow_multiple and self.present:
-                raise ValueError(
-                    f"Processed multiple tags from list: {self.tag_names}"
-                )
-            self.present = True
-            return True
-        return False
-
-    def __bool__(self) -> bool:
-        return self.present
-
-
-@dataclass
-class StrTagMatcher(BaseTagMatcher[str]):
-    extractor: Callable[[Match[str]], str] = lambda match: match.string
-    value: str = ""
-
-
-@dataclass
-class IntTagMatcher(BaseTagMatcher[int]):
-    extractor: Callable[[Match[str]], int] = lambda match: int(match.string)
-    value: int = 0
-
-
-@dataclass
-class DateTagMatcher(BaseTagMatcher[Date]):
-    pattern: re.Pattern[str] = re.compile(
-        (
-            r"(?P<year>\d{4})"
-            r"([-.](?P<month>\d{1,2}|XX)"
-            r"([-.](?P<day>\d{1,2}|XX))?)?"
-        ),
-        re.IGNORECASE,
-    )
-
-    extractor: Callable[[Match[str]], Date] = lambda match: Date(
-        datetime.date(
-            int(match.group("year")),
-            int(m) if (m := match.group("month")).lower() != "xx" else 1,
-            int(d) if (d := match.group("day")).lower() != "xx" else 1,
-        )
-    )
-    value: Date = Date(None)
+    def __int__(self) -> int:
+        return int(self.value or 0)
 
 
 # TODO: combine disk name/number formats
@@ -496,6 +451,53 @@ def parse_disc_number(number_str: str) -> int:
                         number = index + 1
                         break
     return number
+
+
+PARSERS = [
+    DEMO_PARSER := PatternParser(
+        re.compile(
+            r"(?P<name>(tech )?demo|sample|(?P<trial>([^\s]+ )+)?trial)"
+            r"( ((?P<iteration>\d+)|edition|version))?",
+            re.IGNORECASE,
+        )  # not using groups
+    ),
+    ARCADE_PARSER := PatternParser.from_tags(["arcade"]),
+    SWITCH_PARSER := PatternParser.from_tags(["switch", "switch online"]),
+    STEAM_PARSER := PatternParser.from_tags(["steam"]),
+    VIRTUAL_CONSOLE_PARSER := PatternParser.from_tags(["virtual console"]),
+    CLASSIC_MINI_PARSER := PatternParser.from_tags(["classic mini"]),
+    NINTENDO_POWER_PARSER := PatternParser.from_tags(["np"]),
+    UNLICENSED_PARSER := PatternParser.from_tags(["unl", "unlicensed"]),
+    BAD_DUMP_PARSER := PatternParser.from_tags(["b"]),
+    ALTERNATE_PARSER := PatternParser(
+        re.compile(r"alt( (?P<index>\d+))?", re.IGNORECASE),
+        lambda match: match.group("index") or "1",
+    ),
+    PRERELEASE_PARSER := PatternParser(
+        re.compile(
+            r"(?P<name>alpha|beta|([^\s]+ )?promo|(possible )?proto(type)?)"
+            r"( (?P<iteration>\d+))?",
+            re.IGNORECASE,
+        )  # TODO: groups?
+    ),
+    DATE_PARSER := PatternParser(
+        re.compile(
+            r"(?P<year>\d{4})"
+            r"([-.](?P<month>\d{1,2}|XX)"
+            r"([-.](?P<day>\d{1,2}|XX))?)?",
+            re.IGNORECASE,
+        ),
+        lambda match: datetime.date(
+            int(match.group("year")),
+            int(m) if (m := match.group("month")).lower() != "xx" else 1,
+            int(d) if (d := match.group("day")).lower() != "xx" else 1,
+        ).isoformat(),
+    ),
+    DISC_NAME_PARSER := PatternParser(
+        re.compile(r"cd (?P<name1>.+)|(?P<name2>.+) dis[ck]", re.IGNORECASE),
+        lambda match: match.group("name1") or match.group("name2"),
+    ),
+]
 
 
 @dataclass
@@ -531,25 +533,19 @@ class Metadata:
 
         TAG_MATCHERS: list[Callable[[str], bool]] = [
             # disc_number_matcher := IntTagMatcher(_DISC_PATTERN,
-            demo_matcher := StrTagMatcher(_DEMO_PATTERN),
-            arcade_matcher := TagPresenceMatcher(["arcade"]),
-            switch_matcher := TagPresenceMatcher(["switch", "switch online"]),
-            steam_matcher := TagPresenceMatcher(["steam"]),
-            virtual_console_matcher := TagPresenceMatcher(["virtual console"]),
-            classic_mini_matcher := TagPresenceMatcher(["classic mini"]),
-            nintendo_power_matcher := TagPresenceMatcher(["np"]),
-            unlicensed_matcher := TagPresenceMatcher(["unl", "unlicensed"]),
-            bad_dump_matcher := TagPresenceMatcher(["b"]),
-            alternate_matcher := IntTagMatcher(
-                _ALTERNATE_PATTERN,
-                lambda match: int(match.group("index") or 1),
-            ),
-            disc_name_matcher := StrTagMatcher(
-                _DISC_NAME_PATTERN,
-                lambda match: match.group("name1") or match.group("name2"),
-            ),
-            date_matcher := DateTagMatcher(),
-            prerelease_matcher := StrTagMatcher(_PRERELEASE_PATTERN),  # group?
+            demo_matcher := TagMatcher(DEMO_PARSER),
+            arcade_matcher := TagMatcher(ARCADE_PARSER),
+            switch_matcher := TagMatcher(SWITCH_PARSER),
+            steam_matcher := TagMatcher(STEAM_PARSER),
+            virtual_console_matcher := TagMatcher(VIRTUAL_CONSOLE_PARSER),
+            classic_mini_matcher := TagMatcher(CLASSIC_MINI_PARSER),
+            nintendo_power_matcher := TagMatcher(NINTENDO_POWER_PARSER),
+            unlicensed_matcher := TagMatcher(UNLICENSED_PARSER),
+            bad_dump_matcher := TagMatcher(BAD_DUMP_PARSER),
+            alternate_matcher := TagMatcher(ALTERNATE_PARSER),
+            disc_name_matcher := TagMatcher(DISC_NAME_PARSER),
+            date_matcher := TagMatcher(DATE_PARSER),
+            prerelease_matcher := TagMatcher(PRERELEASE_PARSER),
         ]
         matched = False
         for tag in stem_info.tags:
@@ -625,10 +621,14 @@ class Metadata:
                     arcade=bool(arcade_matcher),
                     version=version or "",
                     revision=revision or "",
-                    date=date_matcher.value,
-                    prerelease=prerelease_matcher.value,
-                    demo=demo_matcher.value,
-                    alternate=alternate_matcher.value,
+                    date=Date(
+                        datetime.date.fromisoformat(str(date_matcher))
+                        if date_matcher
+                        else None
+                    ),
+                    prerelease=str(prerelease_matcher),
+                    demo=str(demo_matcher),
+                    alternate=int(alternate_matcher),
                     switch=bool(switch_matcher),
                     steam=bool(steam_matcher),
                     virtual_console=bool(virtual_console_matcher),
