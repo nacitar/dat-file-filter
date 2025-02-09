@@ -41,21 +41,6 @@ _VERSION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-_PRERELEASE_PATTERN = re.compile(
-    (
-        r"(?P<name>alpha|beta|([^\s]+ )?promo|(possible )?proto(type)?)"
-        r"( (?P<iteration>\d+))?"
-    ),
-    re.IGNORECASE,
-)
-_DEMO_PATTERN = re.compile(
-    (
-        r"(?P<name>(tech )?demo|sample|(?P<trial>([^\s]+ )+)?trial)"
-        r"( ((?P<iteration>\d+)|edition|version))?"
-    ),
-    re.IGNORECASE,
-)
-
 _EARLY_ROMAN_NUMERALS = [
     "I",
     "II",
@@ -74,8 +59,6 @@ _EARLY_ROMAN_NUMERALS.extend([f"X{value}" for value in _EARLY_ROMAN_NUMERALS])
 _DISC_PATTERN = re.compile(
     rf"[Dd]is[ck] (?P<disc>\d+|[A-Z]|{'|'.join(_EARLY_ROMAN_NUMERALS)})"
 )
-
-_ALTERNATE_PATTERN = re.compile(r"alt( (?P<index>\d+))?", re.IGNORECASE)
 
 _EARLY_JAPANESE_NUMBERS: list[list[str]] = [
     ["ichi"],
@@ -100,9 +83,6 @@ _JAPANESE_NUMBER_PATTERN = re.compile(
     )
     + r")",
     re.IGNORECASE,
-)
-_DISC_NAME_PATTERN = re.compile(
-    r"cd (?P<name1>.+)|(?P<name2>.+) dis[ck]", re.IGNORECASE
 )
 
 
@@ -371,40 +351,11 @@ class Tags:
         return "Untagged"
 
 
-def FULL_TAG_EXTRACTOR(match: Match[str]) -> str:
-    return match.string
-
-
-@dataclass
-class PatternParser:
-    pattern: re.Pattern[str]
-    extractor: Callable[[Match[str]], str] = FULL_TAG_EXTRACTOR
-
-    @classmethod
-    def from_tags(
-        cls,
-        tags: list[str],
-        extractor: Callable[[Match[str]], str] = FULL_TAG_EXTRACTOR,
-        *,
-        case_sensitive: bool = False,
-    ) -> PatternParser:
-        return cls(
-            re.compile(
-                "|".join(re.escape(tag) for tag in tags),
-                0 if case_sensitive else re.IGNORECASE,
-            ),
-            extractor,
-        )
-
-    def __call__(self, tag: str) -> str:
-        if match := self.pattern.fullmatch(tag):
-            return self.extractor(match)
-        return ""
-
-
+# TODO: maybe make a new class that lets you have a list of TagMatchers
+# in order to independently process things, perhaps with different extractors
 @dataclass
 class TagMatcher:
-    parser: PatternParser
+    parser: Callable[[str], str]
     value: str = ""
     _: KW_ONLY
     allow_duplicates: bool = False
@@ -428,6 +379,40 @@ class TagMatcher:
 
     def __int__(self) -> int:
         return int(self.value or 0)
+
+
+def FULL_TAG_EXTRACTOR(match: Match[str]) -> str:
+    return match.string
+
+
+@dataclass
+class PatternParser:
+    pattern: re.Pattern[str]
+    extractor: Callable[[Match[str]], str] = FULL_TAG_EXTRACTOR
+
+    def matcher(self, *, allow_duplicates: bool = False) -> TagMatcher:
+        return TagMatcher(self, allow_duplicates=allow_duplicates)
+
+    @classmethod
+    def from_tags(
+        cls,
+        tags: list[str],
+        extractor: Callable[[Match[str]], str] = FULL_TAG_EXTRACTOR,
+        *,
+        case_sensitive: bool = False,
+    ) -> PatternParser:
+        return cls(
+            re.compile(
+                "|".join(re.escape(tag) for tag in tags),
+                0 if case_sensitive else re.IGNORECASE,
+            ),
+            extractor,
+        )
+
+    def __call__(self, tag: str) -> str:
+        if match := self.pattern.fullmatch(tag):
+            return self.extractor(match)
+        return ""
 
 
 # TODO: combine disk name/number formats
@@ -533,19 +518,19 @@ class Metadata:
 
         TAG_MATCHERS: list[Callable[[str], bool]] = [
             # disc_number_matcher := IntTagMatcher(_DISC_PATTERN,
-            demo_matcher := TagMatcher(DEMO_PARSER),
-            arcade_matcher := TagMatcher(ARCADE_PARSER),
-            switch_matcher := TagMatcher(SWITCH_PARSER),
-            steam_matcher := TagMatcher(STEAM_PARSER),
-            virtual_console_matcher := TagMatcher(VIRTUAL_CONSOLE_PARSER),
-            classic_mini_matcher := TagMatcher(CLASSIC_MINI_PARSER),
-            nintendo_power_matcher := TagMatcher(NINTENDO_POWER_PARSER),
-            unlicensed_matcher := TagMatcher(UNLICENSED_PARSER),
-            bad_dump_matcher := TagMatcher(BAD_DUMP_PARSER),
-            alternate_matcher := TagMatcher(ALTERNATE_PARSER),
-            disc_name_matcher := TagMatcher(DISC_NAME_PARSER),
-            date_matcher := TagMatcher(DATE_PARSER),
-            prerelease_matcher := TagMatcher(PRERELEASE_PARSER),
+            demo_matcher := DEMO_PARSER.matcher(),
+            arcade_matcher := ARCADE_PARSER.matcher(),
+            switch_matcher := SWITCH_PARSER.matcher(),
+            steam_matcher := STEAM_PARSER.matcher(),
+            virtual_console_matcher := VIRTUAL_CONSOLE_PARSER.matcher(),
+            classic_mini_matcher := CLASSIC_MINI_PARSER.matcher(),
+            nintendo_power_matcher := NINTENDO_POWER_PARSER.matcher(),
+            unlicensed_matcher := UNLICENSED_PARSER.matcher(),
+            bad_dump_matcher := BAD_DUMP_PARSER.matcher(),
+            alternate_matcher := ALTERNATE_PARSER.matcher(),
+            disc_name_matcher := DISC_NAME_PARSER.matcher(),
+            date_matcher := DATE_PARSER.matcher(),
+            prerelease_matcher := PRERELEASE_PARSER.matcher(),
         ]
         matched = False
         for tag in stem_info.tags:
