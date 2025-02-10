@@ -41,50 +41,6 @@ _VERSION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-_EARLY_ROMAN_NUMERALS = [
-    "I",
-    "II",
-    "III",
-    "IV",
-    "V",
-    "VI",
-    "VII",
-    "VIII",
-    "IX",
-    "X",
-]
-_EARLY_ROMAN_NUMERALS.extend([f"X{value}" for value in _EARLY_ROMAN_NUMERALS])
-
-
-_DISC_PATTERN = re.compile(
-    rf"[Dd]is[ck] (?P<disc>\d+|[A-Z]|{'|'.join(_EARLY_ROMAN_NUMERALS)})"
-)
-
-_EARLY_JAPANESE_NUMBERS: list[list[str]] = [
-    ["ichi"],
-    ["ni"],
-    ["san"],
-    ["shi", "yon"],
-    ["go"],
-    ["roku"],
-    ["shichi", "nana"],
-    ["hachi"],
-    ["kyū", "ku", "kyu"],
-    ["jū", "ju"],
-]
-_JAPANESE_NUMBER_PATTERN = re.compile(
-    r"([^\s]+ )?([Dd]is[ck] )?(?P<disc>"
-    + "|".join(
-        [
-            re.escape(item)
-            for sublist in _EARLY_JAPANESE_NUMBERS
-            for item in sublist
-        ]
-    )
-    + r")",
-    re.IGNORECASE,
-)
-
 
 @unique
 class Language(StrEnum):
@@ -164,6 +120,7 @@ class Edition:
     demo: str = ""
     date: Date = field(default_factory=lambda: Date(None))
     alternate: int = 0
+    wii: bool = False
     switch: bool = False
     steam: bool = False
     virtual_console: bool = False
@@ -179,6 +136,7 @@ class Edition:
             or self.demo
             or self.date
             or self.alternate
+            or self.wii
             or self.switch
             or self.steam
             or self.virtual_console
@@ -208,6 +166,8 @@ class Edition:
                 output.append(f"(Alt {self.alternate})")
             else:
                 output.append("(Alt)")
+        if self.wii:
+            output.append("(Wii)")
         if self.switch:
             output.append("(Switch)")
         if self.steam:
@@ -363,9 +323,13 @@ class TagMatcher:
     def __call__(self, tag: str) -> bool:
         if value := self.parser(tag):
             if self.value:
-                if not self.allow_duplicates or value != self.value:
+                if not self.allow_duplicates:
+                    raise ValueError(f'Multiple "{tag}" equivalent tags')
+                elif value != self.value:
                     raise ValueError(
-                        f"Parsed multiple '{tag}' equivalent tags"
+                        f'Multiple "{tag}" equivalent tags (allowed), but'
+                        " conflicting values encountered:"
+                        f' "{self.value}" != "{value}"'
                     )
             self.value = value
             return True
@@ -415,74 +379,124 @@ class PatternParser:
         return ""
 
 
-# TODO: combine disk name/number formats
-# <name> disc <number>
-# <cd> <name>
-# <name> disc
-# TODO: allow matching from lists of tags without regex
-def parse_disc_number(number_str: str) -> int:
-    number = 0
-    try:
-        number = _EARLY_ROMAN_NUMERALS.index(number_str) + 1
-    except ValueError:
-        try:
-            number = int(number_str)
-        except ValueError:
-            if len(number_str) == 1 and number_str.isalpha():
-                number = ord(number_str.lower()) - ord("a")
-            else:
-                for index in range(len(_EARLY_JAPANESE_NUMBERS)):
-                    if number_str in _EARLY_JAPANESE_NUMBERS[index]:
-                        number = index + 1
-                        break
-    return number
-
-
-PARSERS = [
-    DEMO_PARSER := PatternParser(
-        re.compile(
-            r"(?P<name>(tech )?demo|sample|(?P<trial>([^\s]+ )+)?trial)"
-            r"( ((?P<iteration>\d+)|edition|version))?",
-            re.IGNORECASE,
-        )  # not using groups
-    ),
-    ARCADE_PARSER := PatternParser.from_tags(["arcade"]),
-    SWITCH_PARSER := PatternParser.from_tags(["switch", "switch online"]),
-    STEAM_PARSER := PatternParser.from_tags(["steam"]),
-    VIRTUAL_CONSOLE_PARSER := PatternParser.from_tags(["virtual console"]),
-    CLASSIC_MINI_PARSER := PatternParser.from_tags(["classic mini"]),
-    NINTENDO_POWER_PARSER := PatternParser.from_tags(["np"]),
-    UNLICENSED_PARSER := PatternParser.from_tags(["unl", "unlicensed"]),
-    BAD_DUMP_PARSER := PatternParser.from_tags(["b"]),
-    ALTERNATE_PARSER := PatternParser(
-        re.compile(r"alt( (?P<index>\d+))?", re.IGNORECASE),
-        lambda match: match.group("index") or "1",
-    ),
-    PRERELEASE_PARSER := PatternParser(
-        re.compile(
-            r"(?P<name>alpha|beta|([^\s]+ )?promo|(possible )?proto(type)?)"
-            r"( (?P<iteration>\d+))?",
-            re.IGNORECASE,
-        )  # TODO: groups?
-    ),
-    DATE_PARSER := PatternParser(
-        re.compile(
-            r"(?P<year>\d{4})"
-            r"([-.](?P<month>\d{1,2}|XX)"
-            r"([-.](?P<day>\d{1,2}|XX))?)?",
-            re.IGNORECASE,
-        ),
-        lambda match: datetime.date(
-            int(match.group("year")),
-            int(m) if (m := match.group("month")).lower() != "xx" else 1,
-            int(d) if (d := match.group("day")).lower() != "xx" else 1,
-        ).isoformat(),
-    ),
-    DISC_NAME_PARSER := PatternParser(
-        re.compile(r"cd (?P<name1>.+)|(?P<name2>.+) dis[ck]", re.IGNORECASE),
-        lambda match: match.group("name1") or match.group("name2"),
-    ),
+_EARLY_ROMAN_NUMERALS = [
+    "I",
+    "II",
+    "III",
+    "IV",
+    "V",
+    "VI",
+    "VII",
+    "VIII",
+    "IX",
+    "X",
 ]
+_EARLY_ROMAN_NUMERALS.extend([f"X{value}" for value in _EARLY_ROMAN_NUMERALS])
+_EARLY_JAPANESE_NUMBERS: list[list[str]] = [
+    ["ichi"],
+    ["ni"],
+    ["san"],
+    ["shi", "yon"],
+    ["go"],
+    ["roku"],
+    ["shichi", "nana"],
+    ["hachi"],
+    ["kyū", "ku", "kyu"],
+    ["jū", "ju"],
+]
+_ROMAN_OR_JAPANESE_NUMBERS = (
+    "|".join(_EARLY_ROMAN_NUMERALS)
+    + "|"
+    + "|".join(
+        [
+            re.escape(item)
+            for sublist in _EARLY_JAPANESE_NUMBERS
+            for item in sublist
+        ]
+    )
+)
+
+
+def disc_number_to_int(number: str) -> str:
+    if number.isdigit():
+        return number
+    try:
+        # check before alpha due to single-character roman numerals
+        # must be uppercase already to be a roman numeral
+        return str(_EARLY_ROMAN_NUMERALS.index(number) + 1)
+    except ValueError:
+        pass
+    number = number.lower()
+    if len(number) == 1 and number.isalpha():
+        return str(ord(number.lower()) - ord("a"))
+    for index in range(len(_EARLY_JAPANESE_NUMBERS)):
+        if number in _EARLY_JAPANESE_NUMBERS[index]:
+            return str(index + 1)
+    return ""
+
+
+_DISC_ID_PATTERN = re.compile(
+    r"cd (?P<name1>.+)|(?P<name2>.+)-hen|"  # -hen is Japanese for "chapter"
+    r"((?P<name3>.+) )?dis[ck]( (?P<number1>\d+|[A-Z]|"
+    + _ROMAN_OR_JAPANESE_NUMBERS
+    + rf"))?|(?P<number2>{_ROMAN_OR_JAPANESE_NUMBERS})",
+    re.IGNORECASE,
+)
+DISC_NUMBER_PARSER = PatternParser(
+    _DISC_ID_PATTERN,
+    lambda match: disc_number_to_int(
+        match.group("number1") or match.group("number2") or ""
+    ),
+)
+DISC_NAME_PARSER = PatternParser(
+    _DISC_ID_PATTERN,
+    lambda match: (
+        match.group("name1")
+        or match.group("name2")
+        or match.group("name3")
+        or ""
+    ),
+)
+DEMO_PARSER = PatternParser(
+    re.compile(
+        r"(?P<name>(tech )?demo|sample|(?P<trial>([^\s]+ )+)?trial)"
+        r"( ((?P<iteration>\d+)|edition|version))?",
+        re.IGNORECASE,
+    )  # not using groups
+)
+ARCADE_PARSER = PatternParser.from_tags(["arcade"])
+WII_PARSER = PatternParser.from_tags(["wii"])
+SWITCH_PARSER = PatternParser.from_tags(["switch", "switch online"])
+STEAM_PARSER = PatternParser.from_tags(["steam"])
+VIRTUAL_CONSOLE_PARSER = PatternParser.from_tags(["virtual console"])
+CLASSIC_MINI_PARSER = PatternParser.from_tags(["classic mini"])
+NINTENDO_POWER_PARSER = PatternParser.from_tags(["np"])
+UNLICENSED_PARSER = PatternParser.from_tags(["unl", "unlicensed"])
+BAD_DUMP_PARSER = PatternParser.from_tags(["b"])
+ALTERNATE_PARSER = PatternParser(
+    re.compile(r"alt( (?P<index>\d+))?", re.IGNORECASE),
+    lambda match: match.group("index") or "1",
+)
+PRERELEASE_PARSER = PatternParser(
+    re.compile(
+        r"(?P<name>alpha|beta|([^\s]+ )?promo|(possible )?proto(type)?)"
+        r"( (?P<iteration>\d+))?",
+        re.IGNORECASE,
+    )  # TODO: groups?
+)
+DATE_PARSER = PatternParser(
+    re.compile(
+        r"(?P<year>\d{4})"
+        r"([-.](?P<month>\d{1,2}|XX)"
+        r"([-.](?P<day>\d{1,2}|XX))?)?",
+        re.IGNORECASE,
+    ),
+    lambda match: datetime.date(
+        int(match.group("year")),
+        int(m) if (m := match.group("month")).lower() != "xx" else 1,
+        int(d) if (d := match.group("day")).lower() != "xx" else 1,
+    ).isoformat(),
+)
 
 
 @dataclass
@@ -510,16 +524,22 @@ class Metadata:
 
         languages: set[Language] = set()
         regions: set[Region] = set()
-        disc_number: int | None = None
-        japanese_number: int | None = None
         version: str | None = None
         revision: str | None = None
         unhandled_tag_values: list[str] = []
 
-        TAG_MATCHERS: list[Callable[[str], bool]] = [
-            # disc_number_matcher := IntTagMatcher(_DISC_PATTERN,
+        TAG_MATCHERS: list[
+            Callable[[str], bool] | list[Callable[[str], bool]]
+        ] = [
+            [
+                disc_name_matcher := DISC_NAME_PARSER.matcher(),
+                disc_number_matcher := DISC_NUMBER_PARSER.matcher(
+                    allow_duplicates=True
+                ),
+            ],
             demo_matcher := DEMO_PARSER.matcher(),
             arcade_matcher := ARCADE_PARSER.matcher(),
+            wii_matcher := WII_PARSER.matcher(),
             switch_matcher := SWITCH_PARSER.matcher(),
             steam_matcher := STEAM_PARSER.matcher(),
             virtual_console_matcher := VIRTUAL_CONSOLE_PARSER.matcher(),
@@ -528,16 +548,19 @@ class Metadata:
             unlicensed_matcher := UNLICENSED_PARSER.matcher(),
             bad_dump_matcher := BAD_DUMP_PARSER.matcher(),
             alternate_matcher := ALTERNATE_PARSER.matcher(),
-            disc_name_matcher := DISC_NAME_PARSER.matcher(),
             date_matcher := DATE_PARSER.matcher(),
             prerelease_matcher := PRERELEASE_PARSER.matcher(),
         ]
-        matched = False
         for tag in stem_info.tags:
+            matched = False
             ###################################################
-            for matcher in TAG_MATCHERS:
-                if matcher(tag):
-                    matched = True
+            for matcher_group in TAG_MATCHERS:
+                if not isinstance(matcher_group, list):
+                    matcher_group = [matcher_group]
+                for matcher in matcher_group:
+                    if matcher(tag):
+                        matched = True
+                if matched:
                     break
             ###################################################
             if matched:
@@ -554,31 +577,6 @@ class Metadata:
                         "version"
                     ) or version_match.group("value")
             ###################################################
-            elif disc_match := _DISC_PATTERN.fullmatch(tag):
-                if disc_number is not None:
-                    raise ValueError(f"Parsed multiple discs: {stem}")
-                disc_str = disc_match.group("disc")
-                try:
-                    disc_number = _EARLY_ROMAN_NUMERALS.index(disc_str) + 1
-                except ValueError:
-                    try:
-                        disc_number = int(disc_str)
-                    except ValueError:
-                        disc_number = ord(disc_str.lower()) - ord("a")
-            elif japanese_number_match := _JAPANESE_NUMBER_PATTERN.fullmatch(
-                tag
-            ):
-                if japanese_number is not None:
-                    raise ValueError(f"Parsed multiple jp numbers: {stem}")
-                parsed_disc = japanese_number_match.group("disc").lower()
-                for index in range(len(_EARLY_JAPANESE_NUMBERS)):
-                    if parsed_disc in _EARLY_JAPANESE_NUMBERS[index]:
-                        japanese_number = index + 1
-                        break
-                if japanese_number is None:
-                    raise AssertionError(
-                        "number regex and number list mismatched."
-                    )
             elif language := Metadata._LANGUAGE_LOOKUP.get(tag):
                 languages.add(language)
             elif region := Metadata._REGION_LOOKUP.get(tag):
@@ -587,12 +585,6 @@ class Metadata:
                 if not tag:
                     raise RuntimeError("Received blank tag; debug things!")
                 unhandled_tag_values.append(tag)
-        if (
-            disc_number is not None
-            and japanese_number is not None
-            and disc_number != japanese_number
-        ):
-            raise ValueError(f"Got different disc index and jp number: {stem}")
 
         return Metadata(
             stem=stem,
@@ -614,13 +606,17 @@ class Metadata:
                     prerelease=str(prerelease_matcher),
                     demo=str(demo_matcher),
                     alternate=int(alternate_matcher),
+                    wii=bool(wii_matcher),
                     switch=bool(switch_matcher),
                     steam=bool(steam_matcher),
                     virtual_console=bool(virtual_console_matcher),
                     classic_mini=bool(classic_mini_matcher),
                     nintendo_power=bool(nintendo_power_matcher),
                 ),
-                disc=Disc(name=disc_name_matcher.value, number=disc_number),
+                disc=Disc(
+                    name=str(disc_name_matcher),
+                    number=int(disc_number_matcher),
+                ),
             ),
             unlicensed=bool(unlicensed_matcher),
             bad_dump=bool(bad_dump_matcher),
