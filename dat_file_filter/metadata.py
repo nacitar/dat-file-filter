@@ -79,6 +79,8 @@ class Region(StrEnum):
     AUSTRALIA = "Australia"
     CHINA = "China"
     ITALY = "Italy"
+    ISRAEL = "Israel"
+    IRELAND = "Ireland"
     SCANDINAVIA = "Scandinavia"
     LATIN_AMERICA = "Latin America"
     TAIWAN = "Taiwan"
@@ -107,6 +109,8 @@ class Edition:
     revision: str = ""
     prerelease: str = ""
     demo: str = ""
+    early: str = ""
+    debug: bool = False
     date: Date = field(default_factory=lambda: Date(None))
     alternate: int = 0
     wii: bool = False
@@ -123,6 +127,8 @@ class Edition:
             or self.revision
             or self.prerelease
             or self.demo
+            or self.early
+            or self.debug
             or self.date
             or self.alternate
             or self.wii
@@ -148,6 +154,10 @@ class Edition:
             output.append(f"[{self.prerelease}]")
         if self.demo:
             output.append(f"[{self.demo}]")
+        if self.early:
+            output.append(f"[{self.early}]")
+        if self.debug:
+            output.append("[Debug]")
         if self.date:
             output.append(f"({self.date})")
         if self.alternate:
@@ -447,11 +457,14 @@ DISC_NAME_PARSER = PatternParser(
 )
 DEMO_PARSER = PatternParser(
     re.compile(
-        r"(?P<name>(tech )?demo|sample|(?P<trial>([^\s]+ )+)?trial)"
+        r"(?P<name>(tech )?demo|(taikenban )?sample( rom)?"
+        r"|(?P<trial>([^\s]+ )+)?trial)"
         r"( ((?P<iteration>\d+)|edition|version))?",
         re.IGNORECASE,
     )  # not using groups
 )
+
+EARLY_PARSER = PatternParser.from_tags(["early", "earlier"])
 ARCADE_PARSER = PatternParser.from_tags(["arcade"])
 WII_PARSER = PatternParser.from_tags(["wii"])
 SWITCH_PARSER = PatternParser.from_tags(["switch", "switch online"])
@@ -461,6 +474,7 @@ CLASSIC_MINI_PARSER = PatternParser.from_tags(["classic mini"])
 NINTENDO_POWER_PARSER = PatternParser.from_tags(["np"])
 UNLICENSED_PARSER = PatternParser.from_tags(["unl", "unlicensed"])
 BAD_DUMP_PARSER = PatternParser.from_tags(["b"])
+DEBUG_PARSER = PatternParser.from_tags(["debug"])
 ALTERNATE_PARSER = PatternParser(
     re.compile(r"alt( (?P<index>\d+))?", re.IGNORECASE),
     lambda match: match.group("index") or "1",
@@ -544,6 +558,8 @@ class Metadata:
                 ),
             ],
             demo_matcher := DEMO_PARSER.matcher(),
+            early_matcher := EARLY_PARSER.matcher(),
+            debug_matcher := DEBUG_PARSER.matcher(),
             arcade_matcher := ARCADE_PARSER.matcher(),
             wii_matcher := WII_PARSER.matcher(),
             switch_matcher := SWITCH_PARSER.matcher(),
@@ -599,6 +615,8 @@ class Metadata:
                     ),
                     prerelease=str(prerelease_matcher),
                     demo=str(demo_matcher),
+                    early=str(early_matcher),
+                    debug=bool(debug_matcher),
                     alternate=int(alternate_matcher),
                     wii=bool(wii_matcher),
                     switch=bool(switch_matcher),
