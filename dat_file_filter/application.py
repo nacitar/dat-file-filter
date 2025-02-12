@@ -1,9 +1,16 @@
 import argparse
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Sequence
 
 from .metadata import Edition, Metadata
 from .parse import DatFile
+
+
+def default_metadata_filter(metadata: Metadata) -> bool:
+    return (
+        not metadata.variation.edition.prerelease
+        and not metadata.variation.edition.demo
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -36,15 +43,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Print best version of every game.",
     )
     parser.add_argument(
+        "-f",
+        "--filter-metadata",
+        action="store_true",
+        default=False,
+        help="Filter out undesirable ROMs (demos, prereleases, bad dumps...)",
+    )
+    parser.add_argument(
         "dat_file_path", type=str, help="Path to the .dat file"
     )
     args = parser.parse_args(args=argv)
 
-    metadata_filter: Callable[[Metadata], bool] = lambda metadata: (
-        not metadata.variation.edition.prerelease
-        and not metadata.variation.edition.demo
+    dat_content = DatFile(
+        args.dat_file_path,
+        metadata_filter=default_metadata_filter
+        if args.filter_metadata
+        else None,
     )
-    dat_content = DatFile(args.dat_file_path, metadata_filter=metadata_filter)
     if args.best_versions:
         print("Variations:")
         # rom_count = 0

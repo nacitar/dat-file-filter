@@ -31,17 +31,6 @@ class Date:
         return str(self.date) if self.date else ""
 
 
-_VERSION_PATTERN = re.compile(
-    (
-        r"((?P<prefix>v|Ver|Version |r|Rev )(?P<value>[a-f0-9.]+))"
-        r"|(?P<version>\.?(\d|[a-f]\d[^\s]*\d)[^\s]*)"
-        # r"(?P<version>\.?(\d|[a-f]\d[^\s]*\d)[^\s]*)"
-        # r"(?P<version>[a-f0-9.]+)"
-    ),
-    re.IGNORECASE,
-)
-
-
 @unique
 class Language(StrEnum):
     AMERICAN_ENGLISH = "En-US"
@@ -435,21 +424,20 @@ def disc_number_to_int(number: str) -> str:
     return ""
 
 
-_DISC_ID_PATTERN = re.compile(
-    r"cd (?P<name1>.+)|(?P<name2>.+)-hen|"  # -hen is Japanese for "chapter"
-    r"((?P<name3>.+) )?dis[ck]( (?P<number1>\d+|[A-Z]|"
-    + _ROMAN_OR_JAPANESE_NUMBERS
-    + rf"))?|(?P<number2>{_ROMAN_OR_JAPANESE_NUMBERS})",
-    re.IGNORECASE,
-)
 DISC_NUMBER_PARSER = PatternParser(
-    _DISC_ID_PATTERN,
+    re.compile(
+        r"cd (?P<name1>.+)|(?P<name2>.+)-hen|"  # -hen is Jp for "chapter"
+        r"((?P<name3>.+) )?dis[ck]( (?P<number1>\d+|[A-Z]|"
+        + _ROMAN_OR_JAPANESE_NUMBERS
+        + rf"))?|(?P<number2>{_ROMAN_OR_JAPANESE_NUMBERS})",
+        re.IGNORECASE,
+    ),
     lambda match: disc_number_to_int(
         match.group("number1") or match.group("number2") or ""
     ),
 )
 DISC_NAME_PARSER = PatternParser(
-    _DISC_ID_PATTERN,
+    DISC_NUMBER_PARSER.pattern,
     lambda match: (
         match.group("name1")
         or match.group("name2")
@@ -497,6 +485,23 @@ DATE_PARSER = PatternParser(
         int(d) if (d := match.group("day")).lower() != "xx" else 1,
     ).isoformat(),
 )
+REVISION_PARSER = PatternParser(
+    re.compile(r"((Rev|Revision) |r)(?P<revision>[a-f0-9.]+)", re.IGNORECASE),
+    lambda match: match.group("revision"),
+)
+
+VERSION_PARSER = PatternParser(
+    re.compile(
+        r"((?P<prefix>v|Ver|Version )(?P<value>[a-f0-9.]+))"
+        r"|(?P<version>\.?(\d|[a-f]\d[^\s]*\d)[^\s]*)",
+        re.IGNORECASE,
+    ),
+    lambda match: (
+        match.group("value")
+        if match.group("prefix")
+        else match.group("version")
+    ),
+)
 
 
 @dataclass
@@ -521,13 +526,14 @@ class Metadata:
     @staticmethod
     def from_stem(stem: str, *, category: str | None = None) -> Metadata:
         stem_info = StemInfo.from_stem(stem)
-
         languages: set[Language] = set()
         regions: set[Region] = set()
-        version: str | None = None
-        revision: str | None = None
         unhandled_tag_values: list[str] = []
-
+        # If any top-level entry matches, processing concludes for a given tag.
+        # For entries that are lists, all of the matchers will be tried even
+        # even if an earlier member of the list matches, but subsequent
+        # top-level entries won't be processed.This allows multiple matchers
+        # to match a given tag, provided they are grouped together in a list.
         TAG_MATCHERS: list[
             Callable[[str], bool] | list[Callable[[str], bool]]
         ] = [
@@ -550,10 +556,11 @@ class Metadata:
             alternate_matcher := ALTERNATE_PARSER.matcher(),
             date_matcher := DATE_PARSER.matcher(),
             prerelease_matcher := PRERELEASE_PARSER.matcher(),
+            revision_matcher := REVISION_PARSER.matcher(),
+            version_matcher := VERSION_PARSER.matcher(),
         ]
         for tag in stem_info.tags:
             matched = False
-            ###################################################
             for matcher_group in TAG_MATCHERS:
                 if not isinstance(matcher_group, list):
                     matcher_group = [matcher_group]
@@ -562,21 +569,8 @@ class Metadata:
                         matched = True
                 if matched:
                     break
-            ###################################################
             if matched:
                 continue
-            if version_match := _VERSION_PATTERN.fullmatch(tag):
-                if (version_match.group("prefix") or "")[:1].lower() == "r":
-                    if revision is not None:
-                        raise ValueError(f"Parsed multiple revisions: {stem}")
-                    revision = version_match.group("value")
-                else:
-                    if version is not None:
-                        raise ValueError(f"Parsed multiple versions: {stem}")
-                    version = version_match.group(
-                        "version"
-                    ) or version_match.group("value")
-            ###################################################
             elif language := Metadata._LANGUAGE_LOOKUP.get(tag):
                 languages.add(language)
             elif region := Metadata._REGION_LOOKUP.get(tag):
@@ -596,8 +590,8 @@ class Metadata:
                 title=stem_info.title,
                 edition=Edition(
                     arcade=bool(arcade_matcher),
-                    version=version or "",
-                    revision=revision or "",
+                    version=str(version_matcher),
+                    revision=str(revision_matcher),
                     date=Date(
                         datetime.date.fromisoformat(str(date_matcher))
                         if date_matcher
