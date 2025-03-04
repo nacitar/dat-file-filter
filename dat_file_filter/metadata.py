@@ -457,8 +457,9 @@ DISC_NAME_PARSER = PatternParser(
 )
 DEMO_PARSER = PatternParser(
     re.compile(
-        r"(?P<name>(tech )?demo|(taikenban )?sample( rom)?"
-        r"|(?P<trial>([^\s]+ )+)?trial)"
+        r"(?P<name>(tech )?demo|(playable game )?preview( edition by .+)?"
+        r"|.+ previews"  # Square Soft on PlayStation Previews
+        r"|(taikenban )?sample( rom)?|(?P<trial>([^\s]+ )+)?trial)"
         r"( ((?P<iteration>\d+)|edition|version))?",
         re.IGNORECASE,
     )  # not using groups
