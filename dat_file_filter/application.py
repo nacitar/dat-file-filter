@@ -64,20 +64,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Variations:")
         # rom_count = 0
 
-        # TODO: fix so we don't process the same games by a different title
-        # the game_id stuff doesn't work, perhaps by not looping over titles,
-        # or even preventing multiple titles from entering the list.
-        processed_games: set[int] = set()
         for title, game in dat_content.title_to_games.items():
-            game_id = id(game)
-            if title == "Legend of Zelda, The - A Link to the Past":
-                print(f"LTTP: {game_id}")
-            elif title == "Zelda no Densetsu - Kamigami no Triforce":
-                print(f"LTTP J: {game_id}")
-            if game_id in processed_games:
-                continue
-            processed_games.add(game_id)
             print(title)
+            english_version = game.english_version()
+            if english_version:
+                print(f"- [BEST-English] {english_version}")
             for (
                 variation,
                 localization_tags_metadata,

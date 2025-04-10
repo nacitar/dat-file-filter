@@ -40,9 +40,9 @@ class Game:
             tags_to_metadata[metadata.unhandled_tags] = metadata
         return variation_lookup
 
+    # TODO: cache?
     def english_version(self) -> Metadata | None:
-        priorities: set[int] = set()
-        best_metadata: Metadata | None = None
+        best_metadata: list[Metadata] = []
         best_priority: int = 0
 
         for metadata in self.versions:
@@ -50,17 +50,23 @@ class Game:
             if not priority:
                 continue
             if not best_metadata or priority < best_priority:
-                best_metadata = metadata
+                best_metadata = [metadata]
                 best_priority = priority
-            if priority in priorities:
-                for metadata in self.versions:
-                    print(
-                        f"{metadata.localization.english_priority()}"
-                        f" {metadata}"  # {metadata.stem}"
-                    )
-                raise ValueError(f"Multiple versions of priority: {priority}")
-            priorities.add(priority)
-        return best_metadata
+            elif priority == best_priority:
+                best_metadata.append(metadata)
+        best_metadata = sorted(
+            best_metadata, key=lambda metadata: metadata.variation
+        )
+        if best_metadata:
+            # if len(best_metadata) > 1:
+            #     for metadata in best_metadata:
+            #         print(
+            #             f"{metadata.localization.english_priority()}"
+            #             f" {metadata}"  # {metadata.stem}"
+            #         )
+            #     raise ValueError(f"Multiple of priority: {priority}")
+            return best_metadata[0]
+        return None
 
 
 class DatFile:
@@ -93,7 +99,9 @@ class DatFile:
                     raise ValueError(f"Duplicate stem: {stem}")
                 id = child.attrib.get("id", "")
                 cloneofid = child.attrib.get("cloneofid", "")
-                metadata = Metadata.from_stem(stem, category=category)
+                metadata = Metadata.from_stem(
+                    stem, category=category, id=id, cloneofid=cloneofid
+                )
                 if metadata_filter and not metadata_filter(metadata):
                     # print(f"filtering: {metadata.edition}")
                     continue
@@ -113,7 +121,7 @@ class DatFile:
                     )
         # NOTE: same game might have multiple names
         # group game versions
-        self.title_to_stems: dict[str, set[str]] = {}
+        title_to_stems: dict[str, set[str]] = {}
         # groups using clone ids
         for id, clones in original_id_to_clones.items():
             stems: set[str] = set()
@@ -122,22 +130,26 @@ class DatFile:
                 (id_to_metadata[cloneid] for cloneid in clones),
             ):
                 stems.add(metadata.stem)
-                self.title_to_stems[metadata.variation.title] = stems
+                title_to_stems[metadata.variation.title] = stems
         # groups using the title
         for stem, metadata in self.stem_to_metadata.items():
-            stems = self.title_to_stems.setdefault(
-                metadata.variation.title, set()
-            )
+            stems = title_to_stems.setdefault(metadata.variation.title, set())
             stems.add(stem)
 
         self.title_to_games: dict[str, Game] = {}
 
-        for title, stems in self.title_to_stems.items():
-            # TODO: this will prcoess english/japanese versions together
-            # but we probably only want to add it under the english name
-            # if available
-            # Probably just loop through it, taking the title of the one
-            # with the highest english priority?
-            self.title_to_games[title] = Game(
+        processed_titles: set[str] = set()
+        # Game objects for each game, grouped by the english title if available
+        for title, stems in title_to_stems.items():
+            if title in processed_titles:
+                continue
+            game = Game(
                 versions=[self.stem_to_metadata[stem] for stem in stems]
+            )
+            english_version = game.english_version()
+            self.title_to_games[
+                english_version.variation.title if english_version else title
+            ] = game
+            processed_titles |= set(
+                metadata.variation.title for metadata in game.versions
             )
