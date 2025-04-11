@@ -519,15 +519,15 @@ VERSION_PARSER = PatternParser(
 )
 
 
-@dataclass
+@dataclass(frozen=True, eq=True, order=True)
 class Metadata:
-    stem: str
     variation: Variation = field(default_factory=Variation)
-    unhandled_tags: Tags = field(default_factory=Tags)
     localization: Localization = field(default_factory=Localization)
+    unhandled_tags: Tags = field(default_factory=Tags)
     unlicensed: bool = False
     bad_dump: bool = False
     category: str | None = None
+    stem: str = ""
     id: str = ""
     cloneofid: str = ""
 
@@ -657,4 +657,4 @@ class Metadata:
         )
 
     def __str__(self) -> str:
-        return f"{self.variation}, {self.localization}, {self.unhandled_tags}"
+        return f"{self.variation} {self.localization} {self.unhandled_tags}"

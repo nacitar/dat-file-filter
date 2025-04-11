@@ -22,6 +22,9 @@ def get_child_text(element: ET.Element, name: str) -> str:
 class Game:
     versions: list[Metadata]
 
+    def __post_init__(self) -> None:
+        self.versions = sorted(self.versions)
+
     def variations(
         self,
     ) -> dict[Variation, dict[Localization, dict[Tags, Metadata]]]:
@@ -136,6 +139,10 @@ class DatFile:
             stems = title_to_stems.setdefault(metadata.variation.title, set())
             stems.add(stem)
 
+        # sorting this inherently sorts title_to_games below
+        title_to_stems = dict(
+            sorted(title_to_stems.items(), key=lambda item: item[0].casefold())
+        )
         self.title_to_games: dict[str, Game] = {}
 
         processed_titles: set[str] = set()
