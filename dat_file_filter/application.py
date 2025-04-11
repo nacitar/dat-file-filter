@@ -16,10 +16,22 @@ def default_metadata_filter(metadata: Metadata) -> bool:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Process a .dat file.")
     parser.add_argument(
+        "-b",
+        "--best-versions",
+        action="store_true",
+        help="Print best version of every game.",
+    )
+    parser.add_argument(
         "-g",
         "--game-tag-sets",
         action="store_true",
         help="Print games with multiple tag sets.",
+    )
+    parser.add_argument(
+        "-n",
+        "--new-game-tag-sets",
+        action="store_true",
+        help="(NEW) Print games with multiple tag sets.",
     )
     parser.add_argument(
         "-u",
@@ -35,12 +47,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "-c", "--categories", action="store_true", help="Print all categories."
-    )
-    parser.add_argument(
-        "-b",
-        "--best-versions",
-        action="store_true",
-        help="Print best version of every game.",
     )
     parser.add_argument(
         "-f",
@@ -63,12 +69,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.best_versions:
         print("Variations:")
         # rom_count = 0
-
         for title, game in dat_content.title_to_games.items():
             print(title)
             english_version = game.english_version()
             if english_version:
-                print(f"- [BEST-English] {english_version}")
+                print(f"- {english_version}")
+            else:
+                print(f"- [NO-ENGLISH] {game.versions[0]}")
+    if args.new_game_tag_sets:
+        print("Game Tag Sets:")
+        # rom_count = 0
+        for title, game in dat_content.title_to_games.items():
+            print(title)
             for (
                 variation,
                 localization_tags_metadata,

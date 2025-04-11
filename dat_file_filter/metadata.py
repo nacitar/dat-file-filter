@@ -657,4 +657,4 @@ class Metadata:
         )
 
     def __str__(self) -> str:
-        return f"{self.variation} {self.localization} {self.unhandled_tags}"
+        return " ".join(str(value) for value in (self.variation, self.localization, self.unhandled_tags) if value)
