@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import argparse
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, Type
 
 from .metadata import Edition, Metadata
 from .parse import DatFile
@@ -11,6 +14,46 @@ def default_metadata_filter(metadata: Metadata) -> bool:
         not metadata.variation.edition.prerelease
         and not metadata.variation.edition.demo
     )
+
+
+class TreePrinter:
+    @dataclass
+    class Context:
+        printer: TreePrinter
+        nest: bool
+
+        def __enter__(self) -> TreePrinter.Context:
+            if self.nest:
+                self.printer.level += 1
+            if self.nest or not self.printer.lines:
+                self.printer.lines.append([f"{'  ' * self.printer.level}-"])
+            return self  # or whatever you need in the 'as' variable
+
+        def __exit__(
+            self,
+            exc_type: Type[BaseException] | None,
+            exc_value: BaseException | None,
+            TracebackType: None,
+        ) -> None:
+            if self.nest:
+                self.printer.level -= 1
+
+    def __init__(self) -> None:
+        self.lines: list[list[str]] = []
+        self.level = 0
+
+    def child(self, nest: bool) -> Context:
+        return TreePrinter.Context(self, nest)
+
+    def append(self, value: str) -> None:
+        if not self.lines:
+            self.lines.append([])
+        if value:
+            self.lines[-1].append(value)
+
+    def print(self) -> None:
+        for line in self.lines:
+            print(" ".join(line))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -80,23 +123,54 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Game Tag Sets:")
         # rom_count = 0
         for title, game in dat_content.title_to_games.items():
-            print(title)
+            printer = TreePrinter()
+            printer.append(title)
+            game_variations = game.variations()
             for (
                 variation,
-                localization_tags_metadata,
-            ) in game.variations().items():
-                print(f"- {variation}")
-                for (
-                    localization,
-                    tags_metadata,
-                ) in localization_tags_metadata.items():
-                    print(f"  - {localization}")
-                    for tags, metadata in tags_metadata.items():
-                        print(f"    - {tags}: {metadata.stem}")
-                        # rom_count += 1
-        # if rom_count > 3:
-        #        import pdb
-        #    pdb.set_trace()
+                localization_tags_title_metadata,
+            ) in game_variations.items():
+                with printer.child(len(game_variations) > 1):
+                    printer.append(
+                        f"{variation}" if variation else "[No-Variation]"
+                    )
+                    for (
+                        localization,
+                        tags_title_metadata,
+                    ) in localization_tags_title_metadata.items():
+                        with printer.child(
+                            len(localization_tags_title_metadata) > 1
+                        ):
+                            printer.append(
+                                str(localization)
+                                if localization
+                                else "[No-Localization]"
+                            )
+                            for (
+                                tags,
+                                title_metadata,
+                            ) in tags_title_metadata.items():
+                                with printer.child(
+                                    len(tags_title_metadata) > 1
+                                ):
+                                    printer.append(
+                                        f"{tags}" if tags else "[No-Tags]"
+                                    )
+
+                                    show_titles = any(
+                                        title != name
+                                        for name in title_metadata.keys()
+                                    )
+                                    for (
+                                        name,
+                                        metadata,
+                                    ) in title_metadata.items():
+                                        if show_titles:
+                                            with printer.child(
+                                                len(title_metadata) > 1
+                                            ):
+                                                printer.append(name)
+            printer.print()
 
     if args.game_tag_sets:
         print("Game Tag Sets:")

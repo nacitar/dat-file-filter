@@ -27,20 +27,23 @@ class Game:
 
     def variations(
         self,
-    ) -> dict[Variation, dict[Localization, dict[Tags, Metadata]]]:
+    ) -> dict[Variation, dict[Localization, dict[Tags, dict[str, Metadata]]]]:
         variation_lookup: dict[
-            Variation, dict[Localization, dict[Tags, Metadata]]
+            Variation, dict[Localization, dict[Tags, dict[str, Metadata]]]
         ] = {}
         for metadata in self.versions:
-            tags_to_metadata = variation_lookup.setdefault(
+            tags_to_title_to_metadata = variation_lookup.setdefault(
                 metadata.variation, {}
             ).setdefault(metadata.localization, {})
 
-            if metadata.unhandled_tags in tags_to_metadata:
+            title_to_metadata = tags_to_title_to_metadata.setdefault(
+                metadata.unhandled_tags, {}
+            )
+            if metadata.title in title_to_metadata:
                 raise ValueError(
                     f"Multiple game roms with same sorting: {metadata.stem}"
                 )
-            tags_to_metadata[metadata.unhandled_tags] = metadata
+            title_to_metadata[metadata.title] = metadata
         return variation_lookup
 
     # TODO: cache?
@@ -133,10 +136,10 @@ class DatFile:
                 (id_to_metadata[cloneid] for cloneid in clones),
             ):
                 stems.add(metadata.stem)
-                title_to_stems[metadata.variation.title] = stems
+                title_to_stems[metadata.title] = stems
         # groups using the title
         for stem, metadata in self.stem_to_metadata.items():
-            stems = title_to_stems.setdefault(metadata.variation.title, set())
+            stems = title_to_stems.setdefault(metadata.title, set())
             stems.add(stem)
 
         # sorting this inherently sorts title_to_games below
@@ -155,8 +158,8 @@ class DatFile:
             )
             english_version = game.english_version()
             self.title_to_games[
-                english_version.variation.title if english_version else title
+                english_version.title if english_version else title
             ] = game
             processed_titles |= set(
-                metadata.variation.title for metadata in game.versions
+                metadata.title for metadata in game.versions
             )

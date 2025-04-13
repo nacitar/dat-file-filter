@@ -203,17 +203,14 @@ class Disc:
 
 @dataclass(frozen=True, eq=True, order=True)
 class Variation:
-    title: str = ""
     edition: Edition = field(default_factory=Edition)
     disc: Disc = field(default_factory=Disc)
 
     def __bool__(self) -> bool:
-        return bool(self.title or self.edition or self.disc)
+        return bool(self.edition or self.disc)
 
     def __str__(self) -> str:
         output: list[str] = []
-        if self.title:
-            output.append(self.title)
         if self.edition:
             output.append(str(self.edition))
         if self.disc:
@@ -521,6 +518,7 @@ VERSION_PARSER = PatternParser(
 
 @dataclass(frozen=True, eq=True, order=True)
 class Metadata:
+    title: str = ""
     variation: Variation = field(default_factory=Variation)
     localization: Localization = field(default_factory=Localization)
     unhandled_tags: Tags = field(default_factory=Tags)
@@ -611,8 +609,8 @@ class Metadata:
             localization=Localization(
                 regions=frozenset(regions), languages=frozenset(languages)
             ),
+            title=stem_info.title,
             variation=Variation(
-                title=stem_info.title,
                 edition=Edition(
                     arcade=bool(arcade_matcher),
                     version=str(version_matcher),
@@ -657,4 +655,12 @@ class Metadata:
         )
 
     def __str__(self) -> str:
-        return " ".join(str(value) for value in (self.variation, self.localization, self.unhandled_tags) if value)
+        return " ".join(
+            str(value)
+            for value in (
+                self.variation,
+                self.localization,
+                self.unhandled_tags,
+            )
+            if value
+        )
