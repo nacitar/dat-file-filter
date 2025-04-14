@@ -11,8 +11,8 @@ from .parse import DatFile
 
 def default_metadata_filter(metadata: Metadata) -> bool:
     return (
-        not metadata.variation.edition.prerelease
-        and not metadata.variation.edition.demo
+        not metadata.unit.variation.edition.prerelease
+        and not metadata.unit.variation.edition.demo
     )
 
 
@@ -65,10 +65,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Print best version of every game.",
     )
     parser.add_argument(
-        "-g",
-        "--game-tag-sets",
+        "-r",
+        "--report",
         action="store_true",
-        help="Print games with multiple tag sets.",
+        help="Print a hierarchy report of all ROMs for a given game.",
     )
     parser.add_argument(
         "-u",
@@ -104,7 +104,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else None,
     )
     if args.best_versions:
-        print("Variations:")
+        print("Best Versions:")
         # rom_count = 0
         for title, game in dat_content.title_to_games.items():
             print(title)
@@ -113,18 +113,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"- {english_version}")
             else:
                 print(f"- [NO-ENGLISH] {game.versions[0]}")
-    if args.game_tag_sets:
-        print("Game Tag Sets:")
+    if args.report:
+        print("Hierarchy:")
         # rom_count = 0
         for title, game in dat_content.title_to_games.items():
             printer = TreePrinter()
             printer.append(title)
-            game_variations = game.variations()
+            game_hierarchy = game.hierarchy()
             for (
                 variation,
                 localization_tags_title_metadata,
-            ) in game_variations.items():
-                with printer.child(len(game_variations) > 1):
+            ) in game_hierarchy.items():
+                with printer.child(len(game_hierarchy) > 1):
                     printer.append(
                         f"{variation}" if variation else "[No-Variation]"
                     )
@@ -171,17 +171,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         categories: set[str] = set()
         for stem, metadata in dat_content.stem_to_metadata.items():
             if args.editions:
-                if metadata.variation.edition:
-                    editions.add(metadata.variation.edition)
-            if args.unhandled_tags and metadata.unhandled_tags:
-                if metadata.unhandled_tags:
+                if metadata.unit.variation.edition:
+                    editions.add(metadata.unit.variation.edition)
+            if args.unhandled_tags and metadata.unit.unhandled_tags:
+                if metadata.unit.unhandled_tags:
                     unhandled_tags.setdefault(
-                        str(sorted(set(metadata.unhandled_tags.values))),
+                        str(sorted(set(metadata.unit.unhandled_tags.values))),
                         [],  # full group
                     ).append(metadata)
             if args.categories and metadata.category:
                 categories.add(metadata.category)
-            # if metadata.
         if editions:
             print("Editions:")
             for edition in sorted(editions):
@@ -213,7 +212,7 @@ def generate_reports(rom_root: Path) -> None:
                 continue
             try:
                 metadata = Metadata.from_stem(path.stem)
-                all_tags.update(metadata.unhandled_tags.values)
+                all_tags.update(metadata.unit.unhandled_tags.values)
                 metadata_file.write(str(metadata) + "\n")
             except ValueError as e:
                 print(f"Error with file: {path})")
