@@ -71,12 +71,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Print games with multiple tag sets.",
     )
     parser.add_argument(
-        "-n",
-        "--new-game-tag-sets",
-        action="store_true",
-        help="(NEW) Print games with multiple tag sets.",
-    )
-    parser.add_argument(
         "-u",
         "--unhandled-tags",
         action="store_true",
@@ -119,7 +113,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"- {english_version}")
             else:
                 print(f"- [NO-ENGLISH] {game.versions[0]}")
-    if args.new_game_tag_sets:
+    if args.game_tag_sets:
         print("Game Tag Sets:")
         # rom_count = 0
         for title, game in dat_content.title_to_games.items():
@@ -171,81 +165,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                                             ):
                                                 printer.append(name)
             printer.print()
-
-    if args.game_tag_sets:
-        print("Game Tag Sets:")
-        # title, Edition, regions, languages, tags
-        game_tag_sets: dict[
-            str, dict[Edition, dict[str, dict[str, set[str]]]]
-        ] = {}
-
-        for title, game in dat_content.title_to_games.items():
-            for metadata in game.versions:
-                tag_values = sorted(metadata.unhandled_tags.values)
-                game_tag_sets.setdefault(title, {}).setdefault(
-                    metadata.variation.edition, {}
-                ).setdefault(
-                    " ".join(
-                        sorted(
-                            f"[{region.value}]"
-                            for region in metadata.localization.regions
-                        )
-                    ),
-                    {},
-                ).setdefault(
-                    " ".join(
-                        sorted(
-                            f"[{language.value}]"
-                            for language in metadata.localization.languages
-                        )
-                    ),
-                    set(),
-                ).add(
-                    str(tag_values) if tag_values else ""
-                )
-        for title, edition_to_region in game_tag_sets.items():
-            lines = [[title]]
-            indent = 0
-
-            def add_prefix() -> None:
-                if not lines[-1]:
-                    lines[-1].append(f"{'  ' * indent}-")
-
-            for edition, region_to_language in edition_to_region.items():
-                if len(edition_to_region) > 1:
-                    indent += 1
-                    lines.append([])
-                    add_prefix()
-                lines[-1].append(str(edition) or "[No-Edition]")
-                for region, language_to_tag_set in region_to_language.items():
-                    if len(region_to_language) > 1:
-                        indent += 1
-                        lines.append([])
-                        add_prefix()
-                    lines[-1].append(str(region) or "[No-Region]")
-                    for language, tag_set in language_to_tag_set.items():
-                        if len(language_to_tag_set) > 1:
-                            indent += 1
-                            lines.append([])
-                            add_prefix()
-                        lines[-1].append(language or "[No-Language]")
-                        for tag_string in tag_set:
-                            if len(tag_set) > 1:
-                                indent += 1
-                                lines.append([])
-                                add_prefix()
-                            lines[-1].append(tag_string or "[No-Tags]")
-                            if len(tag_set) > 1:
-                                indent -= 1
-                        if len(language_to_tag_set) > 1:
-                            indent -= 1
-                    if len(region_to_language) > 1:
-                        indent -= 1
-                if len(edition_to_region) > 1:
-                    indent -= 1
-            for line in lines:
-                print(" ".join(line))
-        print()
     if args.editions or args.unhandled_tags or args.categories:
         editions: set[Edition] = set()
         unhandled_tags: dict[str, list[Metadata]] = {}
