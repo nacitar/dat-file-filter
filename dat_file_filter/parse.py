@@ -27,7 +27,7 @@ class Game:
         self.versions = sorted(self.versions)
 
     @cached_property
-    def units(self) -> dict[Unit, list[Metadata]]:
+    def unit_to_metadata(self) -> dict[Unit, list[Metadata]]:
         units: dict[Unit, list[Metadata]] = {}
         for metadata in self.versions:
             units.setdefault(metadata.unit, []).append(metadata)
@@ -58,7 +58,7 @@ class Game:
         # TODO: report units that don't have english versions so
         # decisions can be made about them.
         best_versions: list[Metadata] = []
-        for unit, versions in self.units.items():
+        for unit, versions in self.unit_to_metadata.items():
             metadata = Game.english_version(versions)
             if metadata is not None:
                 best_versions.append(metadata)

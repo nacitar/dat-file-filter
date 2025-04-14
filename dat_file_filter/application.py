@@ -105,13 +105,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     if args.best_versions:
         print("Best Versions:")
-        # rom_count = 0
         for title, game in dat_content.title_to_games.items():
+            # units = set(game.unit_to_metadata.keys())
             unit_metadata = game.english_units()
+
             if unit_metadata:
                 print(title)
                 for metadata in unit_metadata:
                     print(f"- {metadata}")
+                    # units.remove(metadata.unit)
+
     if args.report:
         print("Hierarchy:")
         # rom_count = 0
