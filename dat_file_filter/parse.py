@@ -7,16 +7,12 @@ from itertools import chain
 from pathlib import Path
 from typing import Callable
 
-from .metadata import Localization, Metadata, Tags, Unit, Variation
+from .metadata import Entity, Localization, Metadata, Tags, Variation
 
 
 def get_child_text(element: ET.Element, name: str) -> str:
     child = element.find(name)
     return child.text or "" if child is not None else ""
-
-
-# TODO:
-# - skip bad dumps
 
 
 @dataclass
@@ -27,11 +23,13 @@ class Game:
         self.versions = sorted(self.versions)
 
     @cached_property
-    def unit_to_metadata(self) -> dict[Unit, list[Metadata]]:
-        units: dict[Unit, list[Metadata]] = {}
+    def entity_to_metadata(self) -> dict[Entity, list[Metadata]]:
+        entity_to_metadata: dict[Entity, list[Metadata]] = {}
         for metadata in self.versions:
-            units.setdefault(metadata.unit, []).append(metadata)
-        return units
+            entity_to_metadata.setdefault(metadata.unit.entity, []).append(
+                metadata
+            )
+        return entity_to_metadata
 
     def hierarchy(
         self,
@@ -41,11 +39,11 @@ class Game:
         ] = {}
         for metadata in self.versions:
             tags_to_title_to_metadata = variation_lookup.setdefault(
-                metadata.unit.variation, {}
+                metadata.unit.entity.variation, {}
             ).setdefault(metadata.unit.localization, {})
 
             title_to_metadata = tags_to_title_to_metadata.setdefault(
-                metadata.unit.unhandled_tags, {}
+                metadata.unit.entity.unhandled_tags, {}
             )
             if metadata.unit.title in title_to_metadata:
                 raise ValueError(
@@ -54,15 +52,12 @@ class Game:
             title_to_metadata[metadata.unit.title] = metadata
         return variation_lookup
 
-    def english_units(self) -> list[Metadata]:
-        # TODO: report units that don't have english versions so
-        # decisions can be made about them.
+    def english_entities(self) -> list[Metadata]:
         best_versions: list[Metadata] = []
-        for unit, versions in self.unit_to_metadata.items():
+        for entity, versions in self.entity_to_metadata.items():
             metadata = Game.english_version(versions)
             if metadata is not None:
                 best_versions.append(metadata)
-            # TODO: else.. do we keep these units too?  unsure.
         return best_versions
 
     @cached_property
@@ -87,7 +82,7 @@ class Game:
             elif priority == best_priority:
                 best_metadata.append(metadata)
         best_metadata = sorted(
-            best_metadata, key=lambda metadata: metadata.unit.variation
+            best_metadata, key=lambda metadata: metadata.unit.entity.variation
         )
         if best_metadata:
             # if len(best_metadata) > 1:

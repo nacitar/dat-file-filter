@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence, Type
@@ -11,8 +12,8 @@ from .parse import DatFile
 
 def default_metadata_filter(metadata: Metadata) -> bool:
     return (
-        not metadata.unit.variation.edition.prerelease
-        and not metadata.unit.variation.edition.demo
+        not metadata.unit.entity.variation.edition.prerelease
+        and not metadata.unit.entity.variation.edition.demo
     )
 
 
@@ -65,6 +66,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Print best version of every game.",
     )
     parser.add_argument(
+        "-m",
+        "--missing-entities",
+        action="store_true",
+        help=(
+            "Only valid with --best-versions; lists entities with no English"
+            " ROM available; can reveal release differences such as special"
+            " editions or if one region is single-disc and others are not."
+        ),
+    )
+    parser.add_argument(
         "-r",
         "--report",
         action="store_true",
@@ -97,6 +108,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(args=argv)
 
+    if args.missing_entities and not args.best_versions:
+        parser.print_help(sys.stderr)
+        print("", file=sys.stderr)
+        print(
+            "ERROR: --missing-entities is only valid with -b", file=sys.stderr
+        )
+        return 1
+
     dat_content = DatFile(
         args.dat_file_path,
         metadata_filter=default_metadata_filter
@@ -106,14 +125,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.best_versions:
         print("Best Versions:")
         for title, game in dat_content.title_to_games.items():
-            # units = set(game.unit_to_metadata.keys())
-            unit_metadata = game.english_units()
+            entities = set(game.entity_to_metadata.keys())
+            entity_metadata = game.english_entities()
 
-            if unit_metadata:
+            if entity_metadata:
                 print(title)
-                for metadata in unit_metadata:
+                for metadata in entity_metadata:
                     print(f"- {metadata}")
-                    # units.remove(metadata.unit)
+                    entities.remove(metadata.unit.entity)
+                if args.missing_entities:
+                    for entity in entities:
+                        print(f"- [NO-ENGLISH] {entity}")
+            # TODO: else? should I show missing entities for things with NO
+            # english versions whatsoever?  Want to keep some other things?
 
     if args.report:
         print("Hierarchy:")
@@ -173,12 +197,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         categories: set[str] = set()
         for stem, metadata in dat_content.stem_to_metadata.items():
             if args.editions:
-                if metadata.unit.variation.edition:
-                    editions.add(metadata.unit.variation.edition)
-            if args.unhandled_tags and metadata.unit.unhandled_tags:
-                if metadata.unit.unhandled_tags:
+                if metadata.unit.entity.variation.edition:
+                    editions.add(metadata.unit.entity.variation.edition)
+            if args.unhandled_tags and metadata.unit.entity.unhandled_tags:
+                if metadata.unit.entity.unhandled_tags:
                     unhandled_tags.setdefault(
-                        str(sorted(set(metadata.unit.unhandled_tags.values))),
+                        str(
+                            sorted(
+                                set(metadata.unit.entity.unhandled_tags.values)
+                            )
+                        ),
                         [],  # full group
                     ).append(metadata)
             if args.categories and metadata.category:
@@ -214,7 +242,7 @@ def generate_reports(rom_root: Path) -> None:
                 continue
             try:
                 metadata = Metadata.from_stem(path.stem)
-                all_tags.update(metadata.unit.unhandled_tags.values)
+                all_tags.update(metadata.unit.entity.unhandled_tags.values)
                 metadata_file.write(str(metadata) + "\n")
             except ValueError as e:
                 print(f"Error with file: {path})")

@@ -87,6 +87,7 @@ class Region(StrEnum):
     BRAZIL = "Brazil"
     PORTUGAL = "Portugal"
     FRANCH = "France"
+    GREECE = "Greece"
     SPAIN = "Spain"
     BELGIUM = "Belgium"
     NETHERLANDS = "Netherlands"
@@ -263,6 +264,8 @@ class Localization:
                 return 7
             if Region.NEW_ZEALAND in self.regions:
                 return 8
+            if Region.EUROPE in self.regions:
+                return 9
         return 0
 
     def __str__(self) -> str:
@@ -515,30 +518,39 @@ VERSION_PARSER = PatternParser(
 
 
 @dataclass(frozen=True, eq=True, order=True)
-class Unit:
-    title: str = ""
+class Entity:
     variation: Variation = field(default_factory=Variation)
-    localization: Localization = field(default_factory=Localization)
     unhandled_tags: Tags = field(default_factory=Tags)
 
     def __bool__(self) -> bool:
-        return bool(
-            self.title
-            or self.variation
-            or self.localization
-            or self.unhandled_tags
-        )
+        return bool(self.variation or self.unhandled_tags)
+
+    def __str__(self) -> str:
+        output: list[str] = []
+        if self.variation:
+            output.append(str(self.variation))
+        if self.unhandled_tags:
+            output.append(str(self.unhandled_tags))
+        return " ".join(output)
+
+
+@dataclass(frozen=True, eq=True, order=True)
+class Unit:
+    title: str = ""
+    entity: Entity = field(default_factory=Entity)
+    localization: Localization = field(default_factory=Localization)
+
+    def __bool__(self) -> bool:
+        return bool(self.title or self.entity or self.localization)
 
     def __str__(self) -> str:
         output: list[str] = []
         if self.title:
             output.append(self.title)
-        if self.variation:
-            output.append(str(self.variation))
+        if self.entity:
+            output.append(str(self.entity))
         if self.localization:
             output.append(str(self.localization))
-        if self.unhandled_tags:
-            output.append(str(self.unhandled_tags))
         return " ".join(output)
 
 
@@ -629,37 +641,41 @@ class Metadata:
         return Metadata(
             unit=Unit(
                 title=stem_info.title,
-                variation=Variation(
-                    edition=Edition(
-                        arcade=bool(arcade_matcher),
-                        version=str(version_matcher),
-                        revision=str(revision_matcher),
-                        date=Date(
-                            datetime.date.fromisoformat(str(date_matcher))
-                            if date_matcher
-                            else None
+                entity=Entity(
+                    variation=Variation(
+                        edition=Edition(
+                            arcade=bool(arcade_matcher),
+                            version=str(version_matcher),
+                            revision=str(revision_matcher),
+                            date=Date(
+                                datetime.date.fromisoformat(str(date_matcher))
+                                if date_matcher
+                                else None
+                            ),
+                            prerelease=str(prerelease_matcher),
+                            demo=str(demo_matcher),
+                            early=str(early_matcher),
+                            debug=bool(debug_matcher),
+                            alternate=int(alternate_matcher),
+                            wii=bool(wii_matcher),
+                            switch=bool(switch_matcher),
+                            steam=bool(steam_matcher),
+                            virtual_console=bool(virtual_console_matcher),
+                            classic_mini=bool(classic_mini_matcher),
+                            nintendo_power=bool(nintendo_power_matcher),
                         ),
-                        prerelease=str(prerelease_matcher),
-                        demo=str(demo_matcher),
-                        early=str(early_matcher),
-                        debug=bool(debug_matcher),
-                        alternate=int(alternate_matcher),
-                        wii=bool(wii_matcher),
-                        switch=bool(switch_matcher),
-                        steam=bool(steam_matcher),
-                        virtual_console=bool(virtual_console_matcher),
-                        classic_mini=bool(classic_mini_matcher),
-                        nintendo_power=bool(nintendo_power_matcher),
+                        disc=Disc(
+                            name=str(disc_name_matcher),
+                            number=int(disc_number_matcher),
+                        ),
                     ),
-                    disc=Disc(
-                        name=str(disc_name_matcher),
-                        number=int(disc_number_matcher),
+                    unhandled_tags=Tags(
+                        values=frozenset(unhandled_tag_values)
                     ),
                 ),
                 localization=Localization(
                     regions=frozenset(regions), languages=frozenset(languages)
                 ),
-                unhandled_tags=Tags(values=frozenset(unhandled_tag_values)),
             ),
             stem=stem,
             unlicensed=bool(unlicensed_matcher),
