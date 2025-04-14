@@ -107,12 +107,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Best Versions:")
         # rom_count = 0
         for title, game in dat_content.title_to_games.items():
-            print(title)
-            english_version = game.english_version()
-            if english_version:
-                print(f"- {english_version}")
-            else:
-                print(f"- [NO-ENGLISH] {game.versions[0]}")
+            unit_metadata = game.english_units()
+            if unit_metadata:
+                print(title)
+                for metadata in unit_metadata:
+                    print(f"- {metadata}")
     if args.report:
         print("Hierarchy:")
         # rom_count = 0

@@ -54,13 +54,30 @@ class Game:
             title_to_metadata[metadata.unit.title] = metadata
         return variation_lookup
 
-    # TODO: cache?
-    # TODO: per tags and title
-    def english_version(self) -> Metadata | None:
+    def english_units(self) -> list[Metadata]:
+        # TODO: report units that don't have english versions so
+        # decisions can be made about them.
+        best_versions: list[Metadata] = []
+        for unit, versions in self.units.items():
+            metadata = Game.english_version(versions)
+            if metadata is not None:
+                best_versions.append(metadata)
+            # TODO: else.. do we keep these units too?  unsure.
+        return best_versions
+
+    @cached_property
+    def english_title(self) -> str:
+        # this will get the "best" english version of all units
+        # which isn't great, but works to assume a title.
+        english_version = Game.english_version(self.versions)
+        return english_version.unit.title if english_version else ""
+
+    @staticmethod
+    def english_version(versions: list[Metadata]) -> Metadata | None:
         best_metadata: list[Metadata] = []
         best_priority: int = 0
 
-        for metadata in self.versions:
+        for metadata in versions:
             priority = metadata.unit.localization.english_priority()
             if not priority:
                 continue
@@ -165,10 +182,8 @@ class DatFile:
             game = Game(
                 versions=[self.stem_to_metadata[stem] for stem in stems]
             )
-            english_version = game.english_version()
-            self.title_to_games[
-                english_version.unit.title if english_version else title
-            ] = game
+            english_title = game.english_title or title
+            self.title_to_games[english_title] = game
             processed_titles |= set(
                 metadata.unit.title for metadata in game.versions
             )

@@ -195,8 +195,6 @@ class Disc:
         if self.number:
             output.append(f"Disc {self.number}")
         if output:
-            if len(output) == 1:
-                return output[0]
             return f"({", ".join(output)})"
         return ""
 
