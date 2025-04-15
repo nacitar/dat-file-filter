@@ -178,7 +178,9 @@ class Edition:
             output.append("(Classic Mini)")
         if self.nintendo_power:
             output.append("(Nintendo Power)")
-        return " ".join(output)
+        if output:
+            return " ".join(output)
+        return "<Editionless>"
 
 
 @dataclass(frozen=True, eq=True, order=True)
@@ -197,7 +199,7 @@ class Disc:
             output.append(f"Disc {self.number}")
         if output:
             return f"({", ".join(output)})"
-        return ""
+        return "<Discless>"
 
 
 @dataclass(frozen=True, eq=True, order=True)
