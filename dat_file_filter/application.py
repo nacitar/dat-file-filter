@@ -8,6 +8,7 @@ from typing import Sequence, Type
 
 from .metadata import Edition, Metadata
 from .parse import DatFile
+from .term_style import TermStyle
 
 
 def default_metadata_filter(metadata: Metadata) -> bool:
@@ -60,6 +61,15 @@ class TreePrinter:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Process a .dat file.")
     parser.add_argument(
+        "--color",
+        choices=("auto", "always", "never"),
+        default="auto",
+        help=(
+            "Control colorized output: "
+            "'auto' (default), 'always', or 'never'."
+        ),
+    )
+    parser.add_argument(
         "-b",
         "--best-versions",
         action="store_true",
@@ -107,7 +117,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         "dat_file_path", type=str, help="Path to the .dat file"
     )
     args = parser.parse_args(args=argv)
-
     if args.missing_entities and not args.best_versions:
         parser.print_help(sys.stderr)
         print("", file=sys.stderr)
@@ -115,6 +124,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ERROR: --missing-entities is only valid with -b", file=sys.stderr
         )
         return 1
+    TermStyle.set_enabled(
+        args.color == "always"
+        or (args.color == "auto" and sys.stdout.isatty())
+    )
 
     dat_content = DatFile(
         args.dat_file_path,
@@ -125,17 +138,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.best_versions:
         print("Best Versions:")
         for title, game in dat_content.title_to_games.items():
-            entities = set(game.entity_to_metadata.keys())
+            missing_entities = set(game.entity_to_metadata.keys())
             entity_metadata = game.english_entities()
 
             if entity_metadata:
                 print(title)
                 for metadata in entity_metadata:
                     print(f"- {metadata}")
-                    entities.remove(metadata.unit.entity)
+                    missing_entities.remove(metadata.unit.entity)
                 if args.missing_entities:
-                    for entity in entities:
-                        print(f"- [NO-ENGLISH] {entity}")
+                    for entity in missing_entities:
+                        print(
+                            f"{TermStyle.YELLOW}- [NO-ENGLISH]: {entity}"
+                            f"{TermStyle.RESET}"
+                        )
+            elif args.missing_entities:
+                print(
+                    f"{TermStyle.YELLOW}[NO-ENGLISH]: {title}"
+                    f"{TermStyle.RESET}"
+                )
             # TODO: else? should I show missing entities for things with NO
             # english versions whatsoever?  Want to keep some other things?
 
@@ -151,9 +172,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 localization_tags_title_metadata,
             ) in game_hierarchy.items():
                 with printer.child(len(game_hierarchy) > 1):
-                    printer.append(
-                        f"{variation}" if variation else "[No-Variation]"
-                    )
+                    printer.append(str(variation))
                     for (
                         localization,
                         tags_title_metadata,
@@ -161,11 +180,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         with printer.child(
                             len(localization_tags_title_metadata) > 1
                         ):
-                            printer.append(
-                                str(localization)
-                                if localization
-                                else "[No-Localization]"
-                            )
+                            printer.append(str(localization))
                             for (
                                 tags,
                                 title_metadata,
@@ -173,9 +188,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 with printer.child(
                                     len(tags_title_metadata) > 1
                                 ):
-                                    printer.append(
-                                        f"{tags}" if tags else "[No-Tags]"
-                                    )
+                                    printer.append(str(tags))
 
                                     show_titles = any(
                                         title != name

@@ -214,7 +214,9 @@ class Variation:
             output.append(str(self.edition))
         if self.disc:
             output.append(str(self.disc))
-        return " ".join(output)
+        if output:
+            return " ".join(output)
+        return "<Release>"
 
 
 @dataclass(frozen=True, eq=True, order=True)
@@ -286,7 +288,7 @@ class Localization:
             )
         if output:
             return " ".join(output)
-        return "Unlocalized"
+        return "<Unlocalized>"
 
 
 @dataclass(frozen=True, eq=True, order=True)
@@ -305,7 +307,7 @@ class Tags:
     def __str__(self) -> str:
         if self.values:
             return " ".join(f"[{value}]" for value in self.values)
-        return "Untagged"
+        return "<Untagged>"
 
 
 # TODO: maybe make a new class that lets you have a list of TagMatchers
@@ -527,8 +529,7 @@ class Entity:
 
     def __str__(self) -> str:
         output: list[str] = []
-        if self.variation:
-            output.append(str(self.variation))
+        output.append(str(self.variation))
         if self.unhandled_tags:
             output.append(str(self.unhandled_tags))
         return " ".join(output)
