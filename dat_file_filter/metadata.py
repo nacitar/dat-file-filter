@@ -531,7 +531,8 @@ class Entity:
 
     def __str__(self) -> str:
         output: list[str] = []
-        output.append(str(self.variation))
+        if self.variation:
+            output.append(str(self.variation))
         if self.unhandled_tags:
             output.append(str(self.unhandled_tags))
         return " ".join(output)
