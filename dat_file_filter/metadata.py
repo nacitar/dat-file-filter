@@ -10,6 +10,8 @@ from typing import Callable, ClassVar
 
 from .stem_info import StemInfo
 
+# Edition, Version, Localization, Tags, Disc
+
 
 @dataclass(frozen=True, eq=True)
 class Date:
@@ -104,15 +106,37 @@ class Region(StrEnum):
 
 
 @dataclass(frozen=True, eq=True, order=True)
-class Edition:
-    arcade: bool = False
+class Version:
     version: str = ""
     revision: str = ""
+    date: Date = field(default_factory=lambda: Date(None))
+
+    def __bool__(self) -> bool:
+        return bool(self.version or self.revision or self.date)
+
+    def __str__(self) -> str:
+        output: list[str] = []
+        if self.version:
+            output.append(f"v{self.version}")
+        if self.revision:
+            if not self.revision[0].isdigit():
+                output.append(f"Rev {self.revision}")
+            else:
+                output.append(f"r{self.revision}")
+        if self.date:
+            output.append(f"({self.date})")
+        if output:
+            return " ".join(output)
+        return "<Versionless>"
+
+
+@dataclass(frozen=True, eq=True, order=True)
+class Edition:
+    arcade: bool = False
     prerelease: str = ""
     demo: str = ""
     early: str = ""
     debug: bool = False
-    date: Date = field(default_factory=lambda: Date(None))
     alternate: int = 0
     wii: bool = False
     switch: bool = False
@@ -124,13 +148,10 @@ class Edition:
     def __bool__(self) -> bool:
         return bool(
             self.arcade
-            or self.version
-            or self.revision
             or self.prerelease
             or self.demo
             or self.early
             or self.debug
-            or self.date
             or self.alternate
             or self.wii
             or self.switch
@@ -144,13 +165,6 @@ class Edition:
         output: list[str] = []
         if self.arcade:
             output.append("(Arcade)")
-        if self.version:
-            output.append(f"v{self.version}")
-        if self.revision:
-            if not self.revision[0].isdigit():
-                output.append(f"Rev {self.revision}")
-            else:
-                output.append(f"r{self.revision}")
         if self.prerelease:
             output.append(f"[{self.prerelease}]")
         if self.demo:
@@ -159,8 +173,6 @@ class Edition:
             output.append(f"[{self.early}]")
         if self.debug:
             output.append("[Debug]")
-        if self.date:
-            output.append(f"({self.date})")
         if self.alternate:
             if self.alternate > 1:
                 output.append(f"(Alt {self.alternate})")
@@ -200,25 +212,6 @@ class Disc:
         if output:
             return f"({", ".join(output)})"
         return "<Discless>"
-
-
-@dataclass(frozen=True, eq=True, order=True)
-class Variation:
-    edition: Edition = field(default_factory=Edition)
-    disc: Disc = field(default_factory=Disc)
-
-    def __bool__(self) -> bool:
-        return bool(self.edition or self.disc)
-
-    def __str__(self) -> str:
-        output: list[str] = []
-        if self.edition:
-            output.append(str(self.edition))
-        if self.disc:
-            output.append(str(self.disc))
-        if output:
-            return " ".join(output)
-        return "<Release>"
 
 
 @dataclass(frozen=True, eq=True, order=True)
@@ -523,19 +516,29 @@ VERSION_PARSER = PatternParser(
 
 @dataclass(frozen=True, eq=True, order=True)
 class Entity:
-    variation: Variation = field(default_factory=Variation)
+    edition: Edition = field(default_factory=Edition)
+    version: Version = field(default_factory=Version)
+    disc: Disc = field(default_factory=Disc)
     unhandled_tags: Tags = field(default_factory=Tags)
 
     def __bool__(self) -> bool:
-        return bool(self.variation or self.unhandled_tags)
+        return bool(
+            self.edition or self.version or self.disc or self.unhandled_tags
+        )
 
     def __str__(self) -> str:
         output: list[str] = []
-        if self.variation:
-            output.append(str(self.variation))
+        if self.edition:
+            output.append(str(self.edition))
+        if self.version:
+            output.append(str(self.version))
+        if self.disc:
+            output.append(str(self.disc))
         if self.unhandled_tags:
             output.append(str(self.unhandled_tags))
-        return " ".join(output)
+        if output:
+            return " ".join(output)
+        return "<Default>"
 
 
 @dataclass(frozen=True, eq=True, order=True)
@@ -560,7 +563,9 @@ class Unit:
 
 @dataclass(frozen=True, eq=True, order=True)
 class Metadata:
-    unit: Unit = field(default_factory=Unit)
+    title: str = ""
+    entity: Entity = field(default_factory=Entity)
+    localization: Localization = field(default_factory=Localization)
     unlicensed: bool = False
     bad_dump: bool = False
     category: str | None = None
@@ -576,6 +581,8 @@ class Metadata:
     _REGION_LOOKUP: ClassVar[dict[str, Region]] = {
         member.value: member for member in Region
     }
+
+    # TODO: __bool__?
 
     @staticmethod
     def from_stem(
@@ -643,43 +650,39 @@ class Metadata:
                 unhandled_tag_values.append(tag)
 
         return Metadata(
-            unit=Unit(
-                title=stem_info.title,
-                entity=Entity(
-                    variation=Variation(
-                        edition=Edition(
-                            arcade=bool(arcade_matcher),
-                            version=str(version_matcher),
-                            revision=str(revision_matcher),
-                            date=Date(
-                                datetime.date.fromisoformat(str(date_matcher))
-                                if date_matcher
-                                else None
-                            ),
-                            prerelease=str(prerelease_matcher),
-                            demo=str(demo_matcher),
-                            early=str(early_matcher),
-                            debug=bool(debug_matcher),
-                            alternate=int(alternate_matcher),
-                            wii=bool(wii_matcher),
-                            switch=bool(switch_matcher),
-                            steam=bool(steam_matcher),
-                            virtual_console=bool(virtual_console_matcher),
-                            classic_mini=bool(classic_mini_matcher),
-                            nintendo_power=bool(nintendo_power_matcher),
-                        ),
-                        disc=Disc(
-                            name=str(disc_name_matcher),
-                            number=int(disc_number_matcher),
-                        ),
-                    ),
-                    unhandled_tags=Tags(
-                        values=frozenset(unhandled_tag_values)
+            title=stem_info.title,
+            entity=Entity(
+                edition=Edition(
+                    arcade=bool(arcade_matcher),
+                    prerelease=str(prerelease_matcher),
+                    demo=str(demo_matcher),
+                    early=str(early_matcher),
+                    debug=bool(debug_matcher),
+                    alternate=int(alternate_matcher),
+                    wii=bool(wii_matcher),
+                    switch=bool(switch_matcher),
+                    steam=bool(steam_matcher),
+                    virtual_console=bool(virtual_console_matcher),
+                    classic_mini=bool(classic_mini_matcher),
+                    nintendo_power=bool(nintendo_power_matcher),
+                ),
+                version=Version(
+                    version=str(version_matcher),
+                    revision=str(revision_matcher),
+                    date=Date(
+                        datetime.date.fromisoformat(str(date_matcher))
+                        if date_matcher
+                        else None
                     ),
                 ),
-                localization=Localization(
-                    regions=frozenset(regions), languages=frozenset(languages)
+                disc=Disc(
+                    name=str(disc_name_matcher),
+                    number=int(disc_number_matcher),
                 ),
+                unhandled_tags=Tags(values=frozenset(unhandled_tag_values)),
+            ),
+            localization=Localization(
+                regions=frozenset(regions), languages=frozenset(languages)
             ),
             stem=stem,
             unlicensed=bool(unlicensed_matcher),
@@ -700,4 +703,11 @@ class Metadata:
         )
 
     def __str__(self) -> str:
-        return str(self.unit)
+        output: list[str] = []
+        if self.title:
+            output.append(self.title)
+        if self.entity:
+            output.append(str(self.entity))
+        if self.localization:
+            output.append(str(self.localization))
+        return " ".join(output)

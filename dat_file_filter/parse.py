@@ -7,7 +7,15 @@ from itertools import chain
 from pathlib import Path
 from typing import Callable
 
-from .metadata import Entity, Localization, Metadata, Tags, Variation
+from .metadata import (
+    Disc,
+    Edition,
+    Entity,
+    Localization,
+    Metadata,
+    Tags,
+    Version,
+)
 
 
 def get_child_text(element: ET.Element, name: str) -> str:
@@ -26,31 +34,41 @@ class Game:
     def entity_to_metadata(self) -> dict[Entity, list[Metadata]]:
         entity_to_metadata: dict[Entity, list[Metadata]] = {}
         for metadata in self.versions:
-            entity_to_metadata.setdefault(metadata.unit.entity, []).append(
-                metadata
-            )
+            entity_to_metadata.setdefault(metadata.entity, []).append(metadata)
         return entity_to_metadata
 
     def hierarchy(
         self,
-    ) -> dict[Variation, dict[Localization, dict[Tags, dict[str, Metadata]]]]:
-        variation_lookup: dict[
-            Variation, dict[Localization, dict[Tags, dict[str, Metadata]]]
+    ) -> dict[
+        Edition,
+        dict[
+            Version,
+            dict[Localization, dict[Tags, dict[str, dict[Disc, Metadata]]]],
+        ],
+    ]:
+        lookup: dict[
+            Edition,
+            dict[
+                Version,
+                dict[
+                    Localization, dict[Tags, dict[str, dict[Disc, Metadata]]]
+                ],
+            ],
         ] = {}
         for metadata in self.versions:
-            tags_to_title_to_metadata = variation_lookup.setdefault(
-                metadata.unit.entity.variation, {}
-            ).setdefault(metadata.unit.localization, {})
-
-            title_to_metadata = tags_to_title_to_metadata.setdefault(
-                metadata.unit.entity.unhandled_tags, {}
+            disc_to_metadata = (
+                lookup.setdefault(metadata.entity.edition, {})
+                .setdefault(metadata.entity.version, {})
+                .setdefault(metadata.localization, {})
+                .setdefault(metadata.entity.unhandled_tags, {})
+                .setdefault(metadata.title, {})
             )
-            if metadata.unit.title in title_to_metadata:
+            if metadata.entity.disc in disc_to_metadata:
                 raise ValueError(
                     f"Multiple game roms with same sorting: {metadata.stem}"
                 )
-            title_to_metadata[metadata.unit.title] = metadata
-        return variation_lookup
+            disc_to_metadata[metadata.entity.disc] = metadata
+        return lookup
 
     def english_entities(self) -> list[Metadata]:
         best_versions: list[Metadata] = []
@@ -65,7 +83,7 @@ class Game:
         # this will get the "best" english version of all units
         # which isn't great, but works to assume a title.
         english_version = Game.english_version(self.versions)
-        return english_version.unit.title if english_version else ""
+        return english_version.title if english_version else ""
 
     @staticmethod
     def english_version(versions: list[Metadata]) -> Metadata | None:
@@ -73,7 +91,7 @@ class Game:
         best_priority: int = 0
 
         for metadata in versions:
-            priority = metadata.unit.localization.english_priority()
+            priority = metadata.localization.english_priority()
             if not priority:
                 continue
             if not best_metadata or priority < best_priority:
@@ -82,13 +100,13 @@ class Game:
             elif priority == best_priority:
                 best_metadata.append(metadata)
         best_metadata = sorted(
-            best_metadata, key=lambda metadata: metadata.unit.entity.variation
+            best_metadata, key=lambda metadata: metadata.entity
         )
         if best_metadata:
             # if len(best_metadata) > 1:
             #     for metadata in best_metadata:
             #         print(
-            #             f"{metadata.unit.localization.english_priority()}"
+            #             f"{metadata.localization.english_priority()}"
             #             f" {metadata}"  # {metadata.stem}"
             #         )
             #     raise ValueError(f"Multiple of priority: {priority}")
@@ -130,7 +148,7 @@ class DatFile:
                     stem, category=category, id=id, cloneofid=cloneofid
                 )
                 if metadata_filter and not metadata_filter(metadata):
-                    # print(f"filtering: {metadata.unit.variation.edition}")
+                    # print(f"filtering: {metadata.variation.edition}")
                     continue
                 self.stem_to_metadata[stem] = metadata
 
@@ -157,10 +175,10 @@ class DatFile:
                 (id_to_metadata[cloneid] for cloneid in clones),
             ):
                 stems.add(metadata.stem)
-                title_to_stems[metadata.unit.title] = stems
+                title_to_stems[metadata.title] = stems
         # groups using the title
         for stem, metadata in self.stem_to_metadata.items():
-            stems = title_to_stems.setdefault(metadata.unit.title, set())
+            stems = title_to_stems.setdefault(metadata.title, set())
             stems.add(stem)
 
         # sorting this inherently sorts title_to_games below
@@ -180,5 +198,5 @@ class DatFile:
             english_title = game.english_title or title
             self.title_to_games[english_title] = game
             processed_titles |= set(
-                metadata.unit.title for metadata in game.versions
+                metadata.title for metadata in game.versions
             )

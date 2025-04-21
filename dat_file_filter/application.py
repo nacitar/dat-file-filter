@@ -13,8 +13,9 @@ from .term_style import TermStyle
 
 def default_metadata_filter(metadata: Metadata) -> bool:
     return (
-        not metadata.unit.entity.variation.edition.prerelease
-        and not metadata.unit.entity.variation.edition.demo
+        not metadata.entity.edition.prerelease
+        and not metadata.entity.edition.demo
+        and not metadata.entity.edition.early
     )
 
 
@@ -145,7 +146,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(title)
                 for metadata in entity_metadata:
                     print(f"- {metadata}")
-                    missing_entities.remove(metadata.unit.entity)
+                    missing_entities.remove(metadata.entity)
                 if args.missing_entities:
                     for entity in missing_entities:
                         print(
@@ -168,41 +169,62 @@ def main(argv: Sequence[str] | None = None) -> int:
             printer.append(title)
             game_hierarchy = game.hierarchy()
             for (
-                variation,
-                localization_tags_title_metadata,
+                edition,
+                version_localization_tags_title_disc_meta,
             ) in game_hierarchy.items():
                 with printer.child(len(game_hierarchy) > 1):
-                    printer.append(str(variation))
+                    printer.append(str(edition))
                     for (
-                        localization,
-                        tags_title_metadata,
-                    ) in localization_tags_title_metadata.items():
+                        version,
+                        localization_tags_title_disc_meta,
+                    ) in version_localization_tags_title_disc_meta.items():
                         with printer.child(
-                            len(localization_tags_title_metadata) > 1
+                            len(version_localization_tags_title_disc_meta) > 1
                         ):
-                            printer.append(str(localization))
+                            printer.append(str(version))
                             for (
-                                tags,
-                                title_metadata,
-                            ) in tags_title_metadata.items():
+                                localization,
+                                tags_title_disc_meta,
+                            ) in localization_tags_title_disc_meta.items():
                                 with printer.child(
-                                    len(tags_title_metadata) > 1
+                                    len(localization_tags_title_disc_meta) > 1
                                 ):
-                                    printer.append(str(tags))
-
-                                    show_titles = any(
-                                        title != name
-                                        for name in title_metadata.keys()
-                                    )
+                                    printer.append(str(localization))
                                     for (
-                                        name,
-                                        metadata,
-                                    ) in title_metadata.items():
-                                        if show_titles:
-                                            with printer.child(
-                                                len(title_metadata) > 1
-                                            ):
-                                                printer.append(name)
+                                        tags,
+                                        title_disc_meta,
+                                    ) in tags_title_disc_meta.items():
+                                        with printer.child(
+                                            len(tags_title_disc_meta) > 1
+                                        ):
+                                            printer.append(str(tags))
+
+                                            show_titles = False
+                                            for name in title_disc_meta.keys():
+                                                if title != name:
+                                                    show_titles = True
+                                                    break
+                                            for (
+                                                name,
+                                                disc_meta,
+                                            ) in title_disc_meta.items():
+                                                    with printer.child(
+                                                        len(title_disc_meta)
+                                                        > 1 and show_titles
+                                                    ):
+                                                        if show_titles:
+                                                            printer.append(name)
+                                                        for (
+                                                            disc,
+                                                            metadata,
+                                                        ) in disc_meta.items():
+                                                            with printer.child(
+                                                                len(disc_meta)
+                                                                > 1
+                                                            ):
+                                                                printer.append(
+                                                                    str(disc)
+                                                                )
             printer.print()
     if args.editions or args.unhandled_tags or args.categories:
         editions: set[Edition] = set()
@@ -210,15 +232,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         categories: set[str] = set()
         for stem, metadata in dat_content.stem_to_metadata.items():
             if args.editions:
-                if metadata.unit.entity.variation.edition:
-                    editions.add(metadata.unit.entity.variation.edition)
-            if args.unhandled_tags and metadata.unit.entity.unhandled_tags:
-                if metadata.unit.entity.unhandled_tags:
+                if metadata.entity.edition:
+                    editions.add(metadata.entity.edition)
+            if args.unhandled_tags and metadata.entity.unhandled_tags:
+                if metadata.entity.unhandled_tags:
                     unhandled_tags.setdefault(
                         str(
-                            sorted(
-                                set(metadata.unit.entity.unhandled_tags.values)
-                            )
+                            sorted(set(metadata.entity.unhandled_tags.values))
                         ),
                         [],  # full group
                     ).append(metadata)
@@ -255,7 +275,7 @@ def generate_reports(rom_root: Path) -> None:
                 continue
             try:
                 metadata = Metadata.from_stem(path.stem)
-                all_tags.update(metadata.unit.entity.unhandled_tags.values)
+                all_tags.update(metadata.entity.unhandled_tags.values)
                 metadata_file.write(str(metadata) + "\n")
             except ValueError as e:
                 print(f"Error with file: {path})")
