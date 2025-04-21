@@ -43,7 +43,7 @@ class Game:
         Edition,
         dict[
             Version,
-            dict[Localization, dict[Tags, dict[str, dict[Disc, Metadata]]]],
+            dict[Tags, dict[Disc, dict[Localization, dict[str, Metadata]]]],
         ],
     ]:
         lookup: dict[
@@ -51,23 +51,23 @@ class Game:
             dict[
                 Version,
                 dict[
-                    Localization, dict[Tags, dict[str, dict[Disc, Metadata]]]
+                    Tags, dict[Disc, dict[Localization, dict[str, Metadata]]]
                 ],
             ],
         ] = {}
         for metadata in self.versions:
-            disc_to_metadata = (
+            title_to_metadata = (
                 lookup.setdefault(metadata.entity.edition, {})
                 .setdefault(metadata.entity.version, {})
-                .setdefault(metadata.localization, {})
                 .setdefault(metadata.entity.unhandled_tags, {})
-                .setdefault(metadata.title, {})
+                .setdefault(metadata.entity.disc, {})
+                .setdefault(metadata.localization, {})
             )
-            if metadata.entity.disc in disc_to_metadata:
+            if metadata.title in title_to_metadata:
                 raise ValueError(
                     f"Multiple game roms with same sorting: {metadata.stem}"
                 )
-            disc_to_metadata[metadata.entity.disc] = metadata
+            title_to_metadata[metadata.title] = metadata
         return lookup
 
     def english_entities(self) -> list[Metadata]:

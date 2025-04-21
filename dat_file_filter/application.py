@@ -170,60 +170,71 @@ def main(argv: Sequence[str] | None = None) -> int:
             game_hierarchy = game.hierarchy()
             for (
                 edition,
-                version_localization_tags_title_disc_meta,
+                version_tags_disc_localization_title_meta,
             ) in game_hierarchy.items():
                 with printer.child(len(game_hierarchy) > 1):
                     printer.append(str(edition))
                     for (
                         version,
-                        localization_tags_title_disc_meta,
-                    ) in version_localization_tags_title_disc_meta.items():
+                        tags_disc_localization_title_meta,
+                    ) in version_tags_disc_localization_title_meta.items():
                         with printer.child(
-                            len(version_localization_tags_title_disc_meta) > 1
+                            len(version_tags_disc_localization_title_meta) > 1
                         ):
                             printer.append(str(version))
                             for (
-                                localization,
-                                tags_title_disc_meta,
-                            ) in localization_tags_title_disc_meta.items():
+                                tags,
+                                disc_localization_title_meta,
+                            ) in tags_disc_localization_title_meta.items():
                                 with printer.child(
-                                    len(localization_tags_title_disc_meta) > 1
+                                    len(tags_disc_localization_title_meta) > 1
                                 ):
-                                    printer.append(str(localization))
+                                    printer.append(str(tags))
                                     for (
-                                        tags,
-                                        title_disc_meta,
-                                    ) in tags_title_disc_meta.items():
+                                        disc,
+                                        localization_title_meta,
+                                    ) in disc_localization_title_meta.items():
                                         with printer.child(
-                                            len(tags_title_disc_meta) > 1
+                                            len(disc_localization_title_meta)
+                                            > 1
                                         ):
-                                            printer.append(str(tags))
+                                            printer.append(str(disc))
 
-                                            show_titles = False
-                                            for name in title_disc_meta.keys():
-                                                if title != name:
-                                                    show_titles = True
-                                                    break
                                             for (
-                                                name,
-                                                disc_meta,
-                                            ) in title_disc_meta.items():
-                                                    with printer.child(
-                                                        len(title_disc_meta)
-                                                        > 1 and show_titles
-                                                    ):
-                                                        if show_titles:
-                                                            printer.append(name)
+                                                localization,
+                                                title_meta,
+                                            ) in (
+                                                localization_title_meta.items()
+                                            ):
+                                                with printer.child(
+                                                    len(
+                                                        localization_title_meta
+                                                    )
+                                                    > 1
+                                                ):
+                                                    printer.append(
+                                                        str(localization)
+                                                    )
+                                                    show_titles = False
+                                                    for (
+                                                        name
+                                                    ) in title_meta.keys():
+                                                        if title != name:
+                                                            show_titles = True
+                                                            break
+                                                    if show_titles:
                                                         for (
-                                                            disc,
+                                                            name,
                                                             metadata,
-                                                        ) in disc_meta.items():
+                                                        ) in (
+                                                            title_meta.items()
+                                                        ):
                                                             with printer.child(
-                                                                len(disc_meta)
+                                                                len(title_meta)
                                                                 > 1
                                                             ):
                                                                 printer.append(
-                                                                    str(disc)
+                                                                    name
                                                                 )
             printer.print()
     if args.editions or args.unhandled_tags or args.categories:
