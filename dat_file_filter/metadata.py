@@ -542,26 +542,6 @@ class Entity:
 
 
 @dataclass(frozen=True, eq=True, order=True)
-class Unit:
-    title: str = ""
-    entity: Entity = field(default_factory=Entity)
-    localization: Localization = field(default_factory=Localization)
-
-    def __bool__(self) -> bool:
-        return bool(self.title or self.entity or self.localization)
-
-    def __str__(self) -> str:
-        output: list[str] = []
-        if self.title:
-            output.append(self.title)
-        if self.entity:
-            output.append(str(self.entity))
-        if self.localization:
-            output.append(str(self.localization))
-        return " ".join(output)
-
-
-@dataclass(frozen=True, eq=True, order=True)
 class Metadata:
     title: str = ""
     entity: Entity = field(default_factory=Entity)
