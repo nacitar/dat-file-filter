@@ -16,6 +16,17 @@ def default_metadata_filter(metadata: Metadata) -> bool:
         not metadata.entity.edition.prerelease
         and not metadata.entity.edition.demo
         and not metadata.entity.edition.early
+        and (
+            metadata.category.lower()
+            not in [
+                "demos",
+                "demo",
+                "preproduction",
+                "educational",
+                "audio",
+                "video",
+            ]
+        )
     )
 
 
@@ -137,29 +148,31 @@ def main(argv: Sequence[str] | None = None) -> int:
         else None,
     )
     if args.best_versions:
+        # TODO:
+        # - group multidisk
+        # - exclude multiple revisions
+        # - output in a processable form for exporting
+        # ...
+        # OR, just make it output a new dat file
         print("Best Versions:")
         for title, game in dat_content.title_to_games.items():
-            missing_entities = set(game.entity_to_metadata.keys())
-            entity_metadata = game.english_entities()
+            game.print_best_version_tree(
+                title, show_missing=args.missing_entities
+            )
 
+    if args.only_english:  # implement
+        print("Pruning non-english versions:")
+        for title, game in dat_content.title_to_games.items():
+            entity_metadata = game.english_entities()
             if entity_metadata:
-                print(title)
+                # first one gets id, others are clones
+                # need to reference original metadata somehow.
                 for metadata in entity_metadata:
-                    print(f"- {metadata}")
-                    missing_entities.remove(metadata.entity)
-                if args.missing_entities:
-                    for entity in missing_entities:
-                        print(
-                            f"{TermStyle.YELLOW}- [NO-ENGLISH]: {entity}"
-                            f"{TermStyle.RESET}"
-                        )
-            elif args.missing_entities:
-                print(
-                    f"{TermStyle.YELLOW}[NO-ENGLISH]: {title}"
-                    f"{TermStyle.RESET}"
-                )
-            # TODO: else? should I show missing entities for things with NO
-            # english versions whatsoever?  Want to keep some other things?
+                    # perhaps build a table of stem to id/cloneofid and walk
+                    # through the dat file, filtering using that as criteria
+                    pass  # TODO: implement
+
+
 
     if args.report:
         print("Hierarchy:")

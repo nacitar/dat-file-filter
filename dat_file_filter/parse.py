@@ -16,6 +16,7 @@ from .metadata import (
     Tags,
     Version,
 )
+from .term_style import TermStyle
 
 
 def get_child_text(element: ET.Element, name: str) -> str:
@@ -30,6 +31,7 @@ class Game:
     def __post_init__(self) -> None:
         self.versions = sorted(self.versions)
 
+    # TODO: is this cache safe?  versions is mutable!
     @cached_property
     def entity_to_metadata(self) -> dict[Entity, list[Metadata]]:
         entity_to_metadata: dict[Entity, list[Metadata]] = {}
@@ -78,6 +80,7 @@ class Game:
                 best_versions.append(metadata)
         return best_versions
 
+    # TODO: is this cache safe?  versions is mutable!
     @cached_property
     def english_title(self) -> str:
         # this will get the "best" english version of all units
@@ -112,6 +115,34 @@ class Game:
             #     raise ValueError(f"Multiple of priority: {priority}")
             return best_metadata[0]
         return None
+
+    def print_best_version_tree(
+        self, title: str, show_missing: bool = True
+    ) -> None:
+        missing_entities = set(self.entity_to_metadata.keys())
+        entity_metadata = self.english_entities()
+
+        if entity_metadata:
+            if title:
+                print(title)
+            for metadata in entity_metadata:
+                if not title:
+                    title = metadata.title
+                    print(title)
+                print(f"- {metadata}")
+                missing_entities.remove(metadata.entity)
+            if show_missing:
+                for entity in missing_entities:
+                    print(
+                        f"{TermStyle.YELLOW}- [NO-ENGLISH]: {entity}"
+                        f"{TermStyle.RESET}"
+                    )
+        elif show_missing:
+            print(
+                f"{TermStyle.YELLOW}[NO-ENGLISH]: {title}" f"{TermStyle.RESET}"
+            )
+            # TODO: else? should I show missing entities for things with NO
+            # english versions whatsoever?  Want to keep some other things?
 
 
 class DatFile:

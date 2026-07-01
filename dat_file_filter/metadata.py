@@ -548,7 +548,7 @@ class Metadata:
     localization: Localization = field(default_factory=Localization)
     unlicensed: bool = False
     bad_dump: bool = False
-    category: str | None = None
+    category: str = ""
     stem: str = ""
     id: str = ""
     cloneofid: str = ""
@@ -566,11 +566,7 @@ class Metadata:
 
     @staticmethod
     def from_stem(
-        stem: str,
-        *,
-        category: str | None = None,
-        id: str = "",
-        cloneofid: str = "",
+        stem: str, *, category: str = "", id: str = "", cloneofid: str = ""
     ) -> Metadata:
         stem_info = StemInfo.from_stem(stem)
         languages: set[Language] = set()
@@ -672,11 +668,7 @@ class Metadata:
 
     @staticmethod
     def from_path(
-        path: Path,
-        *,
-        category: str | None = None,
-        id: str = "",
-        cloneofid: str = "",
+        path: Path, *, category: str = "", id: str = "", cloneofid: str = ""
     ) -> Metadata:
         return Metadata.from_stem(
             path.stem, category=category, id=id, cloneofid=cloneofid
